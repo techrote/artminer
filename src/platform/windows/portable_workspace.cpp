@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <limits>
+#include <utility>
 #include <vector>
 
 namespace artminer::platform::windows {
@@ -38,8 +39,9 @@ namespace {
                 last_system_error()));
         }
 
-        if (length < buffer.size() - 1U) {
-            const std::filesystem::path executable_path(std::wstring_view(buffer.data(), length));
+        if (static_cast<std::size_t>(length) < buffer.size() - 1U) {
+            const std::filesystem::path executable_path(
+                std::wstring(buffer.data(), static_cast<std::size_t>(length)));
             return core::Result<std::filesystem::path, WorkspaceError>::success(executable_path.parent_path());
         }
 
@@ -133,9 +135,9 @@ core::Result<PortableWorkspace, WorkspaceError> PortableWorkspace::from_executab
 
     auto executable_root = executable_directory();
     if (executable_root.is_error()) {
-        return core::Result<PortableWorkspace, WorkspaceError>::failure(std::move(executable_root).error());
+        return core::Result<PortableWorkspace, WorkspaceError>::failure(executable_root.error());
     }
-    return open(std::move(executable_root).value());
+    return open(executable_root.value());
 }
 
 core::Result<void, WorkspaceError> PortableWorkspace::ensure_layout() const {
