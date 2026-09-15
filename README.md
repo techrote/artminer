@@ -1,6 +1,6 @@
 # ArtMiner
 
-ArtMiner is a standalone Windows-native procedural-art laboratory for exploring, breeding, searching, reproducing, and exporting deterministic visual systems.
+ArtMiner is a standalone Windows-native procedural-art laboratory for exploring, searching, reproducing, and exporting deterministic visual systems.
 
 The project is intentionally dependency-light and self-contained. It is not tied to any game, editor, browser, cloud service, or AI model.
 
