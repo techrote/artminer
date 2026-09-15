@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "core/version.hpp"
 #include "platform/windows/portable_workspace.hpp"
@@ -69,8 +70,7 @@ void print_version() {
 void print_workspace_error(const WorkspaceError& error) {
     std::wcerr << L"workspace error: " << error.message;
     if (error.system_error) {
-        std::wcerr << L" (" << error.system_error.value() << L": "
-                   << error.system_error.message().c_str() << L")";
+        std::wcerr << L" (system error " << error.system_error.value() << L')';
     }
     std::wcerr << L'\n';
 }
