@@ -1,12 +1,16 @@
 #include <Windows.h>
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "core/graph.hpp"
+#include "core/recipe.hpp"
 #include "core/version.hpp"
 #include "platform/windows/portable_workspace.hpp"
 
@@ -28,14 +32,17 @@ struct AppState {
 
 void print_help() {
     std::cout
-        << "Usage: ArtMiner [options]\n\n"
+        << "Usage: ArtMiner [options]\n"
+        << "       ArtMiner recipe validate <file.amr>\n"
+        << "       ArtMiner recipe inspect <file.amr>\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
         << "  --version              Show product/version information.\n"
         << "  --workspace <path>     Use an explicit portable workspace root.\n"
         << "  --check-workspace      Validate/create the workspace layout and exit.\n\n"
+        << "Recipe commands validate typed graph semantics without opening the GUI.\n"
         << "Without options ArtMiner validates its portable workspace and opens the\n"
-        << "minimal AM-001 native application shell.\n";
+        << "minimal native application shell.\n";
 }
 
 void print_version() {
@@ -75,6 +82,80 @@ void print_workspace_error(const WorkspaceError& error) {
     std::wcerr << L'\n';
 }
 
+[[nodiscard]] std::optional<std::string> read_text_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        std::wcerr << L"recipe error: could not open " << path.wstring() << L'\n';
+        return std::nullopt;
+    }
+    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    if (!input.good() && !input.eof()) {
+        std::wcerr << L"recipe error: failed while reading " << path.wstring() << L'\n';
+        return std::nullopt;
+    }
+    return text;
+}
+
+void print_recipe_parse_error(const artminer::core::RecipeError& error) {
+    std::cerr << "recipe parse error";
+    if (error.line != 0U) {
+        std::cerr << " at line " << error.line;
+    }
+    std::cerr << ": " << error.message << '\n';
+}
+
+[[nodiscard]] int run_recipe_command(const int argc, wchar_t* argv[]) {
+    if (argc != 4) {
+        std::cerr << "usage: ArtMiner recipe <validate|inspect> <file.amr>\n";
+        return 2;
+    }
+
+    const std::wstring_view action(argv[2]);
+    if (action != L"validate" && action != L"inspect") {
+        std::wcerr << L"recipe error: unknown recipe action: " << action << L'\n';
+        return 2;
+    }
+
+    const std::filesystem::path path(argv[3]);
+    const auto text = read_text_file(path);
+    if (!text.has_value()) {
+        return 5;
+    }
+
+    auto parsed = artminer::core::parse_recipe(*text);
+    if (parsed.is_error()) {
+        print_recipe_parse_error(parsed.error());
+        return 5;
+    }
+
+    artminer::core::Recipe recipe = std::move(parsed).value();
+    const auto validation_errors = artminer::core::validate_recipe(recipe);
+    if (!validation_errors.empty()) {
+        for (const auto& error : validation_errors) {
+            std::cerr << "recipe validation error: " << error.message << '\n';
+        }
+        return 6;
+    }
+
+    const std::string fingerprint = artminer::core::semantic_fingerprint(recipe);
+    if (action == L"validate") {
+        std::cout << "valid " << fingerprint << '\n';
+        return 0;
+    }
+
+    std::cout << "ArtMiner recipe\n"
+              << "schema: " << recipe.schema_version << '\n'
+              << "evaluator: " << recipe.evaluator_version << '\n'
+              << "seed: " << recipe.root_seed << '\n'
+              << "render: " << recipe.render.width << 'x' << recipe.render.height << ' ' << recipe.render.quality << '\n'
+              << "nodes: " << recipe.nodes.size() << '\n'
+              << "edges: " << recipe.edges.size() << '\n'
+              << "outputs: " << recipe.outputs.size() << '\n'
+              << "metadata: " << recipe.metadata.size() << '\n'
+              << "fingerprint: " << fingerprint << '\n';
+    return 0;
+}
+
 LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
     auto* state = reinterpret_cast<AppState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
 
@@ -91,11 +172,11 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
         GetClientRect(window, &client);
         FillRect(device_context, &client, GetSysColorBrush(COLOR_WINDOW));
 
-        std::wstring text = L"ArtMiner 0.1.0-dev\r\n\r\nAM-001 native foundation is running.\r\n\r\nPortable workspace:\r\n";
+        std::wstring text = L"ArtMiner 0.1.0-dev\r\n\r\nAM-002 recipe/graph foundation is available.\r\n\r\nPortable workspace:\r\n";
         if (state != nullptr) {
             text += state->workspace_root;
         }
-        text += L"\r\n\r\nClose this window to exit.";
+        text += L"\r\n\r\nUse 'ArtMiner recipe inspect <file.amr>' for headless recipe inspection.\r\n\r\nClose this window to exit.";
 
         client.left += 24;
         client.top += 24;
@@ -140,12 +221,12 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
     HWND window = CreateWindowExW(
         0,
         kWindowClass,
-        L"ArtMiner — AM-001 Bootstrap",
+        L"ArtMiner — AM-002 Recipe Foundation",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
         760,
-        420,
+        440,
         nullptr,
         nullptr,
         instance,
@@ -178,6 +259,10 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
 
 int wmain(const int argc, wchar_t* argv[]) {
     static_assert(sizeof(void*) == 8, "ArtMiner requires an x64 process.");
+
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"recipe") {
+        return run_recipe_command(argc, argv);
+    }
 
     CommandLine command_line;
     if (!parse_command_line(argc, argv, command_line)) {

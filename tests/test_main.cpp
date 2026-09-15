@@ -2,11 +2,15 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <set>
+#include <string>
 #include <string_view>
 
 #include "core/checked_math.hpp"
+#include "core/graph.hpp"
 #include "core/hash.hpp"
 #include "core/prng.hpp"
+#include "core/recipe.hpp"
 #include "core/result.hpp"
 #include "platform/windows/portable_workspace.hpp"
 
@@ -19,6 +23,43 @@ void expect(const bool condition, const std::string_view message) {
         ++g_failures;
         std::cerr << "FAIL: " << message << '\n';
     }
+}
+
+[[nodiscard]] bool has_validation_error(
+    const std::vector<artminer::core::ValidationError>& errors,
+    const artminer::core::ValidationErrorCode code) {
+    for (const auto& error : errors) {
+        if (error.code == code) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] std::string_view valid_recipe_text() {
+    return R"AMR(# ArtMiner AM-002 reference recipe
+amr 1
+evaluator 1
+seed 42
+render 64 64 "reference"
+node "source" "core.scalar.constant" 1
+param "source" "value" f64 0.5
+node "img" "core.image.from_scalar" 1
+param "img" "palette" enum "grayscale"
+edge "source" "value" "img" "source"
+output "main" "img" "value"
+meta "example.note" "non-semantic metadata"
+)AMR";
+}
+
+[[nodiscard]] artminer::core::Recipe make_valid_recipe() {
+    auto parsed = artminer::core::parse_recipe(valid_recipe_text());
+    if (parsed.is_error()) {
+        ++g_failures;
+        std::cerr << "FAIL: valid recipe fixture did not parse: " << parsed.error().message << '\n';
+        return {};
+    }
+    return std::move(parsed).value();
 }
 
 void test_splitmix64_vectors() {
@@ -122,7 +163,7 @@ void test_result_contract() {
 void test_portable_workspace() {
     using artminer::platform::windows::PortableWorkspace;
 
-    const auto test_root = std::filesystem::temp_directory_path() / L"artminer-am001-workspace-test";
+    const auto test_root = std::filesystem::temp_directory_path() / L"artminer-am002-workspace-test";
     std::error_code cleanup_error;
     std::filesystem::remove_all(test_root, cleanup_error);
 
@@ -148,6 +189,186 @@ void test_portable_workspace() {
     std::filesystem::remove_all(test_root, cleanup_error);
 }
 
+void test_registry_metadata_contract() {
+    using artminer::core::DataKind;
+
+    const auto& registry = artminer::core::builtin_node_registry();
+    std::set<DataKind> kinds;
+    std::set<std::string> type_ids;
+    for (const auto& node : registry.nodes()) {
+        expect(type_ids.insert(node.type_id).second, "built-in node type identifiers are unique");
+        expect(node.semantic_version > 0U, "built-in node semantic versions are explicit");
+        for (const auto& port : node.inputs) {
+            kinds.insert(port.kind);
+        }
+        for (const auto& port : node.outputs) {
+            kinds.insert(port.kind);
+        }
+    }
+
+    expect(kinds.contains(DataKind::scalar_field), "registry exposes ScalarField");
+    expect(kinds.contains(DataKind::vector_field), "registry exposes VectorField");
+    expect(kinds.contains(DataKind::colour_field), "registry exposes ColourField");
+    expect(kinds.contains(DataKind::mask), "registry exposes Mask");
+    expect(kinds.contains(DataKind::particle_set), "registry exposes ParticleSet");
+    expect(kinds.contains(DataKind::palette), "registry exposes Palette");
+    expect(kinds.contains(DataKind::image), "registry exposes Image");
+}
+
+void test_recipe_round_trip_and_fingerprint() {
+    using artminer::core::parse_recipe;
+    using artminer::core::semantic_fingerprint;
+    using artminer::core::serialize_recipe_canonical;
+    using artminer::core::validate_recipe;
+
+    artminer::core::Recipe recipe = make_valid_recipe();
+    const auto errors = validate_recipe(recipe);
+    expect(errors.empty(), "reference recipe validates");
+
+    const std::string canonical = serialize_recipe_canonical(recipe);
+    auto reparsed = parse_recipe(canonical);
+    expect(reparsed.is_ok(), "canonical recipe parses again");
+    if (reparsed.is_ok()) {
+        const artminer::core::Recipe round_trip = std::move(reparsed).value();
+        expect(validate_recipe(round_trip).empty(), "round-tripped recipe validates");
+        expect(serialize_recipe_canonical(round_trip) == canonical, "canonical serialization is idempotent");
+        expect(
+            semantic_fingerprint(round_trip) == "b9aed1288926e59c8c40115733cd32bf",
+            "semantic fingerprint reference vector");
+    }
+}
+
+void test_recipe_order_and_metadata_do_not_change_semantics() {
+    constexpr std::string_view reordered = R"AMR(
+# Same semantics, deliberately different order/spacing and metadata.
+amr 1
+ evaluator 1
+seed 42
+render 64 64 reference
+node img core.image.from_scalar 1
+node source core.scalar.constant 1
+param img palette enum grayscale
+param source value f64 0.5
+output main img value
+edge source value img source
+meta ui.note "different note"
+)AMR";
+
+    auto first = artminer::core::parse_recipe(valid_recipe_text());
+    auto second = artminer::core::parse_recipe(reordered);
+    expect(first.is_ok() && second.is_ok(), "reordered equivalent recipe parses");
+    if (first.is_ok() && second.is_ok()) {
+        expect(artminer::core::validate_recipe(first.value()).empty(), "first equivalent recipe validates");
+        expect(artminer::core::validate_recipe(second.value()).empty(), "second equivalent recipe validates");
+        expect(
+            artminer::core::semantic_fingerprint(first.value()) == artminer::core::semantic_fingerprint(second.value()),
+            "semantic fingerprint ignores ordering, whitespace, comments and non-semantic metadata");
+        expect(
+            artminer::core::serialize_recipe_canonical(first.value()) !=
+                artminer::core::serialize_recipe_canonical(second.value()),
+            "canonical file serialization preserves differing metadata");
+    }
+}
+
+void test_recipe_parse_failures() {
+    auto malformed = artminer::core::parse_recipe(
+        "amr 1\nevaluator 1\nseed 1\nrender 16 16 reference\nnode \"broken core.scalar.constant 1\n");
+    expect(malformed.is_error(), "unterminated quote is rejected");
+    if (malformed.is_error()) {
+        expect(malformed.error().line == 5U, "malformed recipe reports source line");
+    }
+
+    auto unsupported = artminer::core::parse_recipe("amr 99\nevaluator 1\nseed 1\nrender 16 16 reference\n");
+    expect(unsupported.is_error(), "unsupported schema is rejected");
+    if (unsupported.is_error()) {
+        expect(
+            unsupported.error().code == artminer::core::RecipeErrorCode::unsupported_schema_version,
+            "unsupported schema has specific error code");
+    }
+
+    auto unknown_record = artminer::core::parse_recipe(
+        "amr 1\nevaluator 1\nseed 1\nrender 16 16 reference\nfuture-semantic surprise\n");
+    expect(unknown_record.is_error(), "unknown semantic record is rejected rather than ignored");
+}
+
+void test_graph_validation_failures() {
+    using artminer::core::ValidationErrorCode;
+
+    {
+        auto recipe = make_valid_recipe();
+        recipe.nodes.push_back(recipe.nodes.front());
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::duplicate_node_id),
+            "duplicate node ids are rejected");
+    }
+    {
+        auto recipe = make_valid_recipe();
+        recipe.nodes.front().semantic_version = 99U;
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::unsupported_node_version),
+            "unsupported node semantic versions are rejected");
+    }
+    {
+        auto recipe = make_valid_recipe();
+        recipe.nodes.front().parameters.front().value = artminer::core::i64{1};
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::parameter_type_mismatch),
+            "parameter type mismatches are rejected");
+    }
+    {
+        auto recipe = make_valid_recipe();
+        recipe.nodes.front().parameters.front().value = 2000000.0;
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::parameter_out_of_domain),
+            "parameter domain violations are rejected");
+    }
+    {
+        auto recipe = make_valid_recipe();
+        recipe.edges.front().from_node = "missing";
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::missing_node),
+            "dangling edges are rejected");
+    }
+    {
+        auto recipe = make_valid_recipe();
+        recipe.edges.clear();
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::missing_required_input),
+            "required inputs are enforced from node metadata");
+    }
+    {
+        auto recipe = make_valid_recipe();
+        artminer::core::NodeInstance palette;
+        palette.id = "palette";
+        palette.type_id = "core.palette.default";
+        palette.semantic_version = 1U;
+        palette.parameters.push_back({"preset", std::string("mono")});
+        recipe.nodes.push_back(std::move(palette));
+        recipe.edges.front().from_node = "palette";
+        expect(
+            has_validation_error(artminer::core::validate_recipe(recipe), ValidationErrorCode::incompatible_port_kind),
+            "incompatible typed ports are rejected");
+    }
+
+    constexpr std::string_view cyclic = R"AMR(amr 1
+evaluator 1
+seed 5
+render 32 32 reference
+node a core.scalar.pass 1
+node b core.scalar.pass 1
+edge a value b source
+edge b value a source
+output main a value
+)AMR";
+    auto parsed_cycle = artminer::core::parse_recipe(cyclic);
+    expect(parsed_cycle.is_ok(), "cyclic fixture parses structurally");
+    if (parsed_cycle.is_ok()) {
+        expect(
+            has_validation_error(artminer::core::validate_recipe(parsed_cycle.value()), ValidationErrorCode::cycle_detected),
+            "ordinary graph cycles are rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -158,12 +379,17 @@ int main() {
     test_checked_math();
     test_result_contract();
     test_portable_workspace();
+    test_registry_metadata_contract();
+    test_recipe_round_trip_and_fingerprint();
+    test_recipe_order_and_metadata_do_not_change_semantics();
+    test_recipe_parse_failures();
+    test_graph_validation_failures();
 
     if (g_failures != 0) {
         std::cerr << g_failures << " test assertion(s) failed.\n";
         return 1;
     }
 
-    std::cout << "ArtMiner AM-001 tests passed.\n";
+    std::cout << "ArtMiner AM-002 tests passed.\n";
     return 0;
 }
