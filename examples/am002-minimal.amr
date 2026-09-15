@@ -1,0 +1,12 @@
+# Minimal AM-002 recipe. This establishes recipe/graph semantics only; AM-003 adds rendering.
+amr 1
+evaluator 1
+seed 42
+render 64 64 "reference"
+node "source" "core.scalar.constant" 1
+param "source" "value" f64 0.5
+node "img" "core.image.from_scalar" 1
+param "img" "palette" enum "grayscale"
+edge "source" "value" "img" "source"
+output "main" "img" "value"
+meta "example.note" "non-semantic metadata"
