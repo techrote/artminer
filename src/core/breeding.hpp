@@ -13,6 +13,7 @@
 namespace artminer::core {
 
 inline constexpr u32 kCrossoverOperatorVersion = 1U;
+inline constexpr u32 kLineageFormatVersion = 1U;
 
 enum class CrossoverErrorCode {
     invalid_parent,
@@ -54,6 +55,7 @@ struct LineageRecord {
 enum class LineageErrorCode {
     no_lineage,
     malformed_lineage,
+    unsupported_lineage_version,
     parent_mismatch,
     replay_failed,
 };
@@ -63,6 +65,30 @@ struct LineageError {
     std::string message;
 };
 
+[[nodiscard]] LineageRecord make_crossover_lineage_record(
+    const Recipe& child,
+    const Recipe& parent_a,
+    const Recipe& parent_b,
+    u64 crossover_seed,
+    u32 operator_version,
+    const ParameterLocks& locks);
+
+[[nodiscard]] LineageRecord make_parameter_mutation_lineage_record(
+    const Recipe& child,
+    const Recipe& parent,
+    u64 mutation_seed,
+    u32 operator_version,
+    double strength,
+    const ParameterLocks& locks);
+
+[[nodiscard]] LineageRecord make_seed_variant_lineage_record(
+    const Recipe& child,
+    const Recipe& parent,
+    u64 variation_seed,
+    u32 operator_version = kParameterMutationOperatorVersion);
+
+[[nodiscard]] std::string serialize_lineage_record(const LineageRecord& record);
+[[nodiscard]] Result<LineageRecord, LineageError> parse_lineage_record(std::string_view text);
 [[nodiscard]] Result<LineageRecord, LineageError> lineage_record_from_recipe(const Recipe& recipe);
 
 [[nodiscard]] Result<Recipe, LineageError> replay_lineage_record(
