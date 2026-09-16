@@ -66,6 +66,8 @@ target_link_libraries(artminer_nodes PUBLIC artminer_core)
 artminer_apply_warnings(artminer_nodes)
 
 add_library(artminer_quarry STATIC
+    src/quarry/candidate_recipe.cpp
+    src/quarry/diversity.cpp
     src/quarry/metrics.cpp
     src/quarry/quarry.cpp
     src/quarry/thumbnail_cache.cpp
@@ -225,6 +227,18 @@ target_link_libraries(ArtMinerQuarryThumbnailTests PRIVATE
 target_compile_definitions(ArtMinerQuarryThumbnailTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerQuarryThumbnailTests)
 
+add_executable(ArtMinerQuarryDiversityTests
+    tests/quarry_diversity_test.cpp
+)
+target_link_libraries(ArtMinerQuarryDiversityTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_quarry
+    artminer_platform_windows
+)
+target_compile_definitions(ArtMinerQuarryDiversityTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerQuarryDiversityTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
@@ -235,6 +249,7 @@ add_test(NAME artminer.breeding-lineage COMMAND ArtMinerBreedingTests)
 add_test(NAME artminer.export COMMAND ArtMinerExportTests)
 add_test(NAME artminer.quarry COMMAND ArtMinerQuarryTests)
 add_test(NAME artminer.quarry-thumbnail COMMAND ArtMinerQuarryThumbnailTests)
+add_test(NAME artminer.quarry-diversity COMMAND ArtMinerQuarryDiversityTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
