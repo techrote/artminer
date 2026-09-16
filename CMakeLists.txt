@@ -76,6 +76,8 @@ target_compile_definitions(artminer_platform_windows PRIVATE UNICODE _UNICODE WI
 artminer_apply_warnings(artminer_platform_windows)
 
 add_library(artminer_export_windows STATIC
+    src/export/export.cpp
+    src/export/windows/wic_image.cpp
     src/export/windows/wic_png.cpp
 )
 target_include_directories(artminer_export_windows PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -93,6 +95,8 @@ artminer_apply_warnings(artminer_gpu_windows)
 
 add_executable(ArtMiner
     src/app/browser_window.cpp
+    src/app/export_command.cpp
+    src/app/export_window.cpp
     src/app/lineage_window.cpp
     src/app/main.cpp
     src/app/playback_window.cpp
@@ -176,6 +180,17 @@ target_link_libraries(ArtMinerBreedingTests PRIVATE
 target_compile_definitions(ArtMinerBreedingTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerBreedingTests)
 
+add_executable(ArtMinerExportTests
+    tests/export_test.cpp
+)
+target_link_libraries(ArtMinerExportTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_export_windows
+)
+target_compile_definitions(ArtMinerExportTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+artminer_apply_warnings(ArtMinerExportTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
@@ -183,6 +198,7 @@ add_test(NAME artminer.specimen-browser COMMAND ArtMinerSpecimenTests)
 add_test(NAME artminer.growth COMMAND ArtMinerGrowthTests)
 add_test(NAME artminer.motion COMMAND ArtMinerMotionTests)
 add_test(NAME artminer.breeding-lineage COMMAND ArtMinerBreedingTests)
+add_test(NAME artminer.export COMMAND ArtMinerExportTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
