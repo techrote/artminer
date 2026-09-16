@@ -1,3 +1,5 @@
+#include <cerrno>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -8,6 +10,7 @@
 #include <utility>
 
 #include "app/browser_window.hpp"
+#include "app/growth_window.hpp"
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
 #include "core/version.hpp"
@@ -33,16 +36,20 @@ void print_help() {
         << "Usage: ArtMiner [options]\n"
         << "       ArtMiner recipe validate <file.amr>\n"
         << "       ArtMiner recipe inspect <file.amr>\n"
-        << "       ArtMiner render <file.amr> <output.png>\n\n"
+        << "       ArtMiner render <file.amr> <output.png> [--tick N]\n"
+        << "       ArtMiner growth inspect <file.amr>\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
         << "  --version              Show product/version information.\n"
         << "  --workspace <path>     Use an explicit portable workspace root.\n"
         << "  --check-workspace      Validate/create the workspace layout and exit.\n"
         << "  --open <file.amr>      Open a recipe in the specimen browser.\n\n"
-        << "Headless recipe/render commands use the canonical CPU reference path and\n"
-        << "do not open the GUI. PNG renders are accompanied by deterministic\n"
-        << "<output>.artminer.txt provenance containing the complete recipe.\n\n"
+        << "Headless recipe/render commands use the canonical CPU reference path.\n"
+        << "--tick selects the explicit fixed simulation tick; omitted means tick 0.\n"
+        << "PNG renders are accompanied by deterministic <output>.artminer.txt\n"
+        << "provenance containing the complete semantic recipe.\n\n"
+        << "growth inspect opens a native tick selector with Render and Reset controls.\n"
+        << "The selected tick is UI state only and never mutates the saved recipe.\n\n"
         << "Without a headless command ArtMiner opens the native 4x4 specimen browser.\n"
         << "Mutation and seed-only variation are deterministic from explicit seeds.\n"
         << "Main shortcuts: M mutate, N seed variants, F favourite, arrow keys select,\n"
@@ -134,6 +141,19 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
     return recipe;
 }
 
+[[nodiscard]] std::optional<artminer::core::u64> parse_tick_argument(const wchar_t* text) noexcept {
+    if (text == nullptr || *text == L'\0' || *text == L'-') {
+        return std::nullopt;
+    }
+    errno = 0;
+    wchar_t* end = nullptr;
+    const unsigned long long parsed = std::wcstoull(text, &end, 10);
+    if (errno == ERANGE || end == text || end == nullptr || *end != L'\0') {
+        return std::nullopt;
+    }
+    return static_cast<artminer::core::u64>(parsed);
+}
+
 [[nodiscard]] int run_recipe_command(const int argc, wchar_t* argv[]) {
     if (argc != 4) {
         std::cerr << "usage: ArtMiner recipe <validate|inspect> <file.amr>\n";
@@ -167,17 +187,31 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
 }
 
 [[nodiscard]] int run_render_command(const int argc, wchar_t* argv[]) {
-    if (argc != 4) {
-        std::cerr << "usage: ArtMiner render <file.amr> <output.png>\n";
+    if (argc != 4 && argc != 6) {
+        std::cerr << "usage: ArtMiner render <file.amr> <output.png> [--tick N]\n";
         return 2;
     }
+    artminer::core::u64 tick = 0U;
+    if (argc == 6) {
+        if (std::wstring_view(argv[4]) != L"--tick") {
+            std::wcerr << L"render error: expected --tick after output path\n";
+            return 2;
+        }
+        const auto parsed_tick = parse_tick_argument(argv[5]);
+        if (!parsed_tick.has_value()) {
+            std::wcerr << L"render error: --tick requires an unsigned decimal integer\n";
+            return 2;
+        }
+        tick = *parsed_tick;
+    }
+
     const std::filesystem::path recipe_path(argv[2]);
     const std::filesystem::path output_path(argv[3]);
     auto recipe = load_validated_recipe(recipe_path);
     if (!recipe.has_value()) {
         return 6;
     }
-    auto rendered = artminer::nodes::render_reference(*recipe);
+    auto rendered = artminer::nodes::render_reference_at_tick(*recipe, tick);
     if (rendered.is_error()) {
         std::cerr << "render error: " << rendered.error().message << '\n';
         return 7;
@@ -194,10 +228,23 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
     const std::wstring image_hash_wide(image_hash.begin(), image_hash.end());
     const std::wstring recipe_hash_wide(recipe_hash.begin(), recipe_hash.end());
     std::wcout << L"rendered " << output_path.wstring() << L" " << image.width << L"x" << image.height
+               << L" tick " << tick
                << L" image-hash " << image_hash_wide
                << L" recipe " << recipe_hash_wide
                << L" provenance " << sidecar.wstring() << L'\n';
     return 0;
+}
+
+[[nodiscard]] int run_growth_command(const int argc, wchar_t* argv[]) {
+    if (argc != 4 || std::wstring_view(argv[2]) != L"inspect") {
+        std::cerr << "usage: ArtMiner growth inspect <file.amr>\n";
+        return 2;
+    }
+    auto recipe = load_validated_recipe(std::filesystem::path(argv[3]));
+    if (!recipe.has_value()) {
+        return 6;
+    }
+    return artminer::app::run_growth_inspector(*recipe);
 }
 
 }  // namespace
@@ -210,6 +257,9 @@ int wmain(const int argc, wchar_t* argv[]) {
     }
     if (argc >= 2 && std::wstring_view(argv[1]) == L"render") {
         return run_render_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"growth") {
+        return run_growth_command(argc, argv);
     }
 
     CommandLine command_line;
