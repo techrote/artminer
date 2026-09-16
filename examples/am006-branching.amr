@@ -1,0 +1,15 @@
+# Stable-tip branching growth. Try --tick 90.
+amr 1
+evaluator 1
+seed 7640891576956012809
+render 128 128 "reference"
+node "growth" "core.growth.branching" 1
+param "growth" "initial_branches" i64 4
+param "growth" "max_tips" i64 512
+param "growth" "turn_chance" f64 0.18
+param "growth" "branch_chance" f64 0.045
+param "growth" "boundary" enum "clamp"
+param "growth" "palette" enum "mono"
+output "main" "growth" "image"
+meta "example.family" "branching-growth"
+meta "example.recommended_tick" "90"
