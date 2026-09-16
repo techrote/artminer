@@ -98,8 +98,8 @@ void paint(HWND window, WindowState& state) {
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB;
 
-        const int available_width = (std::max)(1, client.right - client.left - 32);
-        const int available_height = (std::max)(1, client.bottom - client.top - 84);
+        const int available_width = (std::max)(1, static_cast<int>(client.right - client.left - 32L));
+        const int available_height = (std::max)(1, static_cast<int>(client.bottom - client.top - 84L));
         const double scale_x = static_cast<double>(available_width) / state.inspection.width;
         const double scale_y = static_cast<double>(available_height) / state.inspection.height;
         const double scale = (std::min)(scale_x, scale_y);
