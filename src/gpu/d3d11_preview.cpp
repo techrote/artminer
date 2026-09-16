@@ -1049,6 +1049,13 @@ core::Result<void, PreviewError> D3d11Preview::resize(const u32 width, const u32
     if (width == impl_->width && height == impl_->height) {
         return core::Result<void, PreviewError>::success();
     }
+    // DXGI requires every direct and indirect reference to the old back buffer
+    // to be released before ResizeBuffers. The immediate context retains the
+    // currently bound RTV across Present(), so unbind it explicitly first.
+    if (impl_->context != nullptr) {
+        impl_->context->OMSetRenderTargets(0U, nullptr, nullptr);
+        impl_->context->Flush();
+    }
     impl_->backbuffer_rtv.Reset();
     const HRESULT hr = impl_->swap_chain->ResizeBuffers(0U, width, height, DXGI_FORMAT_UNKNOWN, 0U);
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
