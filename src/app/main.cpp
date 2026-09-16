@@ -1,10 +1,8 @@
 #include <cerrno>
 #include <cwchar>
 #include <filesystem>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -17,6 +15,7 @@
 #include "app/playback_window.hpp"
 #include "app/quarry_command.hpp"
 #include "core/graph.hpp"
+#include "core/local_text.hpp"
 #include "core/recipe.hpp"
 #include "core/version.hpp"
 #include "export/windows/wic_png.hpp"
@@ -52,19 +51,16 @@ void print_help() {
         << "       ArtMiner quarry <create|run|resume|inspect|ui> ...\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
-        << "  --version              Show product/version information.\n"
+        << "  --version              Show product and semantic-version information.\n"
         << "  --workspace <path>     Use an explicit portable workspace root.\n"
         << "  --check-workspace      Validate/create the workspace layout and exit.\n"
         << "  --open <file.amr>      Open a recipe in the specimen browser.\n\n"
-        << "AM-009 export provides transactional PNG/BMP/raw RGBA, deterministic frame\n"
-        << "sequences, sprite sheets/atlases, palette text/CSV and conservative .cube LUTs.\n"
-        << "Use 'ArtMiner export' without further arguments for the complete syntax.\n"
-        << "AM-010 Quarry provides deterministic bounded candidate jobs, transparent metrics,\n"
-        << "disposable caching, cancellation/checkpoint resume, and raw metric browsing.\n"
-        << "Use 'ArtMiner quarry' without further arguments for the complete syntax.\n"
+        << "Export provides transactional PNG/BMP/raw RGBA, deterministic frame sequences,\n"
+        << "sprite sheets/atlases, palette text/CSV and conservative .cube LUTs.\n"
+        << "Quarry provides deterministic bounded jobs, transparent metrics, disposable caching,\n"
+        << "cancellation/checkpoint resume, diversity exploration and topology search.\n"
         << "Static render uses the canonical CPU path. render-tick and render-range use\n"
-        << "the canonical fixed-tick motion/feedback path. Legacy PNG renders retain\n"
-        << "their deterministic provenance sidecars.\n\n"
+        << "the canonical fixed-tick motion/feedback path.\n\n"
         << "Without a command ArtMiner opens the native 4x4 specimen browser.\n"
         << "Mutation and seed-only variation are deterministic from explicit seeds.\n"
         << "Main shortcuts: M mutate, N seed variants, F favourite, arrow keys select,\n"
@@ -114,17 +110,13 @@ void print_workspace_error(const WorkspaceError& error) {
 }
 
 [[nodiscard]] std::optional<std::string> read_text_file(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        std::wcerr << L"recipe error: could not open " << path.wstring() << L'\n';
+    auto text = artminer::core::read_local_text_file(path);
+    if (text.is_error()) {
+        std::wcerr << L"recipe error: bounded UTF-8 read rejected " << path.wstring() << L'\n';
+        std::cerr << "detail: " << text.error().message << '\n';
         return std::nullopt;
     }
-    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (!input.good() && !input.eof()) {
-        std::wcerr << L"recipe error: failed while reading " << path.wstring() << L'\n';
-        return std::nullopt;
-    }
-    return text;
+    return std::move(text).value();
 }
 
 void print_recipe_parse_error(const artminer::core::RecipeError& error) {
