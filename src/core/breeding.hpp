@@ -1,0 +1,88 @@
+#pragma once
+
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "core/recipe.hpp"
+#include "core/result.hpp"
+#include "core/specimen_browser.hpp"
+#include "core/types.hpp"
+
+namespace artminer::core {
+
+inline constexpr u32 kCrossoverOperatorVersion = 1U;
+
+enum class CrossoverErrorCode {
+    invalid_parent,
+    incompatible_parents,
+    unsupported_operator_version,
+    invalid_child,
+};
+
+struct CrossoverError {
+    CrossoverErrorCode code{CrossoverErrorCode::invalid_child};
+    std::string message;
+};
+
+[[nodiscard]] Result<Recipe, CrossoverError> crossover_recipes(
+    const Recipe& parent_a,
+    const Recipe& parent_b,
+    u64 crossover_seed,
+    u32 operator_version,
+    const ParameterLocks& locks,
+    const NodeRegistry& registry = builtin_node_registry());
+
+enum class LineageOperationKind {
+    parameter_mutation,
+    seed_variant,
+    crossover,
+};
+
+struct LineageRecord {
+    LineageOperationKind kind{LineageOperationKind::parameter_mutation};
+    std::string child_fingerprint;
+    std::string parent_a_fingerprint;
+    std::optional<std::string> parent_b_fingerprint;
+    u32 operator_version{0U};
+    u64 operation_seed{0U};
+    std::optional<double> mutation_strength;
+    std::string locks;
+};
+
+enum class LineageErrorCode {
+    no_lineage,
+    malformed_lineage,
+    parent_mismatch,
+    replay_failed,
+};
+
+struct LineageError {
+    LineageErrorCode code{LineageErrorCode::malformed_lineage};
+    std::string message;
+};
+
+[[nodiscard]] Result<LineageRecord, LineageError> lineage_record_from_recipe(const Recipe& recipe);
+
+[[nodiscard]] Result<Recipe, LineageError> replay_lineage_record(
+    const LineageRecord& record,
+    const Recipe& parent_a,
+    const Recipe* parent_b = nullptr,
+    const NodeRegistry& registry = builtin_node_registry());
+
+struct RecipeDiffEntry {
+    std::string path;
+    std::string before;
+    std::string after;
+};
+
+struct RecipeDiff {
+    std::vector<RecipeDiffEntry> semantic;
+    std::vector<RecipeDiffEntry> provenance;
+};
+
+[[nodiscard]] RecipeDiff diff_recipes(const Recipe& before, const Recipe& after);
+[[nodiscard]] std::string format_recipe_diff(const RecipeDiff& diff);
+
+}  // namespace artminer::core
