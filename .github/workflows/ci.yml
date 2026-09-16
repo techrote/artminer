@@ -28,7 +28,18 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Representative release benchmark
-        run: .\build\Release\ArtMinerReleaseBenchmark.exe
+        shell: powershell
+        run: |
+          & .\build\Release\ArtMinerReleaseBenchmark.exe | Tee-Object -FilePath build\release-benchmark.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish benchmark evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArtMiner-1.0.0-release-benchmark
+          path: build/release-benchmark.txt
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Package and smoke-test portable layout
         shell: cmd
