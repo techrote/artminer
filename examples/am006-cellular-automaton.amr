@@ -1,0 +1,20 @@
+# Multi-state deterministic cellular automaton with explicit synchronous update rules.
+amr 1
+evaluator 1
+seed 6002
+render 128 128 "reference"
+node "growth" "core.growth.cellular_automaton" 1
+param "growth" "tick" i64 36
+param "growth" "states" i64 6
+param "growth" "initial_fill" f64 0.31
+param "growth" "birth_min" i64 3
+param "growth" "birth_max" i64 3
+param "growth" "survive_min" i64 2
+param "growth" "survive_max" i64 3
+param "growth" "neighbourhood" enum "moore"
+param "growth" "boundary" enum "repeat"
+node "image" "core.image.from_scalar" 1
+param "image" "palette" enum "grayscale"
+edge "growth" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "cellular-automaton"
