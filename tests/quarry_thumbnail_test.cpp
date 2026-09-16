@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <string_view>
 
 #include "core/recipe.hpp"
@@ -23,9 +24,8 @@ void expect(const bool condition, const std::string_view message) {
 evaluator 1
 seed 19
 render 16 16 reference
-node source field.noise.value 1
-param source frequency f64 5
-param source octaves i64 2
+node source core.scalar.constant 1
+param source value f64 0.5
 node image core.image.from_scalar 1
 param image palette enum grayscale
 edge source value image source
