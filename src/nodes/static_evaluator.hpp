@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -20,6 +21,7 @@ struct Image final {
 enum class EvaluationErrorCode {
     invalid_recipe,
     resource_limit,
+    cancelled,
     missing_output,
     unsupported_output_kind,
     unsupported_node,
@@ -31,11 +33,18 @@ struct EvaluationError final {
     std::string message;
 };
 
-// Canonical AM-003 CPU/reference renderer. The recipe is validated before any
-// evaluation. output_name defaults to the conventional recipe output "main".
+// Canonical CPU/reference renderer. For stateless recipes tick is irrelevant.
+// Stateful AM-006 nodes reconstruct state from recipe + seed + requested tick;
+// display frame rate and prior render calls never participate in semantics.
 [[nodiscard]] core::Result<Image, EvaluationError> render_reference(
     const core::Recipe& recipe,
     std::string_view output_name = "main");
+
+[[nodiscard]] core::Result<Image, EvaluationError> render_reference_at_tick(
+    const core::Recipe& recipe,
+    core::u64 tick,
+    std::string_view output_name = "main",
+    const std::atomic_bool* cancel = nullptr);
 
 // Stable FNV-1a digest of canonical RGBA8 bytes, used by deterministic goldens.
 [[nodiscard]] std::string image_fingerprint(const Image& image);
