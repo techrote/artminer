@@ -1,10 +1,12 @@
 #include "app/quarry_command.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
