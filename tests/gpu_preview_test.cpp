@@ -51,6 +51,14 @@ void expect(const bool condition, const std::string_view message) {
     return recipe;
 }
 
+void report_preview_error(
+    const std::string_view fixture,
+    const artminer::core::Result<artminer::nodes::Image, artminer::gpu::PreviewError>& preview) {
+    if (preview.is_error()) {
+        std::cerr << "GPU preview diagnostic [" << fixture << "]: " << preview.error().message << '\n';
+    }
+}
+
 void test_sdf_gpu_equivalence() {
     const std::filesystem::path root(ARTMINER_SOURCE_DIR);
     const auto path = root / "examples" / "am003-sdf.amr";
@@ -66,6 +74,7 @@ void test_sdf_gpu_equivalence() {
     expect(canonical.is_ok(), "SDF canonical reference renders");
     artminer::gpu::PreviewStatus status;
     auto preview = artminer::gpu::render_preview_warp(recipe, &status);
+    report_preview_error("am003-sdf.amr", preview);
     expect(preview.is_ok(), "SDF D3D11 WARP preview renders");
     if (canonical.is_ok() && preview.is_ok()) {
         expect(status.path == artminer::gpu::PreviewPath::gpu, "SDF WARP test exercises the GPU path rather than fallback");
@@ -89,6 +98,7 @@ void test_unsupported_graph_falls_back_canonically() {
     auto canonical = artminer::nodes::render_reference(recipe);
     artminer::gpu::PreviewStatus status;
     auto preview = artminer::gpu::render_preview_warp(recipe, &status);
+    report_preview_error("am003-fbm-warp.amr", preview);
     expect(canonical.is_ok() && preview.is_ok(), "unsupported graph still previews through canonical CPU fallback");
     if (canonical.is_ok() && preview.is_ok()) {
         expect(status.path == artminer::gpu::PreviewPath::canonical_cpu_fallback, "fallback path is surfaced explicitly");
@@ -107,6 +117,7 @@ void test_all_static_examples_have_honest_preview_path() {
         auto recipe = load_recipe(root / "examples" / filename);
         artminer::gpu::PreviewStatus status;
         auto preview = artminer::gpu::render_preview_warp(recipe, &status);
+        report_preview_error(filename, preview);
         expect(preview.is_ok(), "every committed AM-003 example has either GPU preview or canonical CPU fallback");
         if (preview.is_ok()) {
             expect(
