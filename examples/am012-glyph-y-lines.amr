@@ -1,0 +1,25 @@
+# Y luminance ramp: same luminance distribution/settings as the X example, but orthogonal structure selects horizontal line glyphs.
+amr 1
+evaluator 1
+seed 12001201
+render 64 64 "reference"
+node "coord" "core.scalar.coord_y" 1
+node "image" "core.image.from_scalar" 1
+param "image" "palette" enum "grayscale"
+node "glyph" "core.glyph.settings" 1
+param "glyph" "cell_width" i64 8
+param "glyph" "cell_height" i64 8
+param "glyph" "glyph_set" enum "lines"
+param "glyph" "choice_mode" enum "structure"
+param "glyph" "density_weight" f64 1
+param "glyph" "orientation_weight" f64 4
+param "glyph" "detail_weight" f64 0.5
+param "glyph" "corner_weight" f64 0.25
+param "glyph" "motion_weight" f64 0
+param "glyph" "colour_mode" enum "ansi256"
+param "glyph" "limited_palette" enum "cool8"
+param "glyph" "background_mode" enum "black"
+param "glyph" "alpha_mode" enum "composite-black"
+edge "coord" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "glyph-y-lines"

@@ -13,10 +13,12 @@
 #include <utility>
 
 #include "app/export_window.hpp"
+#include "app/glyph_preview_window.hpp"
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
 #include "core/types.hpp"
 #include "export/export.hpp"
+#include "export/glyph_export.hpp"
 #include "platform/windows/portable_workspace.hpp"
 
 namespace artminer::app {
@@ -87,6 +89,16 @@ namespace {
     return std::nullopt;
 }
 
+[[nodiscard]] std::optional<exporting::GlyphTextFormat> parse_glyph_format(const std::wstring_view text) {
+    if (text == L"text" || text == L"txt" || text == L"utf8" || text == L"utf-8") {
+        return exporting::GlyphTextFormat::utf8;
+    }
+    if (text == L"ansi" || text == L"ans") {
+        return exporting::GlyphTextFormat::ansi;
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] std::optional<std::string> parse_ascii_node_id(const std::wstring_view text) {
     if (text.empty()) {
         return std::nullopt;
@@ -110,7 +122,11 @@ void print_usage() {
         << "  ArtMiner export frame <file.amr> <tick> <output-dir> <png|bmp|rgba>\n"
         << "  ArtMiner export sequence <file.amr> <start> <end> <output-dir> <png|bmp|rgba>\n"
         << "  ArtMiner export sheet <file.amr> <start> <end> <columns> <output-dir> <png|bmp|rgba>\n"
-        << "  ArtMiner export palette <file.amr> <palette-node> <output-dir> <text|csv|cube>\n";
+        << "  ArtMiner export palette <file.amr> <palette-node> <output-dir> <text|csv|cube>\n"
+        << "  ArtMiner export glyph-preview <file.amr> <glyph-settings-node> [tick]\n"
+        << "  ArtMiner export glyph <file.amr> <glyph-settings-node> <output-dir> <text|ansi>\n"
+        << "  ArtMiner export glyph-frame <file.amr> <glyph-settings-node> <tick> <output-dir> <text|ansi>\n"
+        << "  ArtMiner export glyph-sequence <file.amr> <glyph-settings-node> <start> <end> <output-dir> <text|ansi>\n";
 }
 
 [[nodiscard]] int finish_export(const core::Recipe& recipe, exporting::ExportRequest request) {
@@ -120,6 +136,19 @@ void print_usage() {
         return 8;
     }
     std::wcout << L"exported " << exported.value().directory.wstring()
+               << L" manifest " << exported.value().manifest_path.wstring() << L'\n';
+    std::cout << "recipe " << exported.value().recipe_fingerprint
+              << " files " << exported.value().files.size() << '\n';
+    return 0;
+}
+
+[[nodiscard]] int finish_glyph_export(const core::Recipe& recipe, exporting::GlyphExportRequest request) {
+    auto exported = exporting::export_glyph_recipe(recipe, request);
+    if (exported.is_error()) {
+        std::cerr << "glyph export error: " << exported.error().message << '\n';
+        return 8;
+    }
+    std::wcout << L"exported glyph set " << exported.value().directory.wstring()
                << L" manifest " << exported.value().manifest_path.wstring() << L'\n';
     std::cout << "recipe " << exported.value().recipe_fingerprint
               << " files " << exported.value().files.size() << '\n';
@@ -156,6 +185,101 @@ int run_export_command(const int argc, wchar_t* argv[]) {
             return 4;
         }
         return run_export_application(*recipe, workspace.layout().output);
+    }
+
+    if (action == L"glyph-preview") {
+        if (argc != 5 && argc != 6) {
+            print_usage();
+            return 2;
+        }
+        auto recipe = load_recipe(std::filesystem::path(argv[3]));
+        auto node_id = parse_ascii_node_id(std::wstring_view(argv[4]));
+        if (!recipe || !node_id) {
+            if (!node_id) {
+                std::cerr << "glyph preview error: settings node id must be non-empty ASCII\n";
+            }
+            return 6;
+        }
+        std::optional<core::u64> tick;
+        if (argc == 6) {
+            tick = parse_u64(argv[5]);
+            if (!tick) {
+                std::cerr << "glyph preview error: tick must be an unsigned integer\n";
+                return 2;
+            }
+        }
+        return run_glyph_preview_application(*recipe, *node_id, tick);
+    }
+
+    if (action == L"glyph") {
+        if (argc != 7) {
+            print_usage();
+            return 2;
+        }
+        auto recipe = load_recipe(std::filesystem::path(argv[3]));
+        auto node_id = parse_ascii_node_id(std::wstring_view(argv[4]));
+        auto format = parse_glyph_format(std::wstring_view(argv[6]));
+        if (!recipe || !node_id || !format) {
+            if (!format) {
+                std::cerr << "glyph export error: format must be text or ansi\n";
+            }
+            return 6;
+        }
+        exporting::GlyphExportRequest request;
+        request.kind = exporting::GlyphExportKind::single;
+        request.format = *format;
+        request.destination_directory = std::filesystem::path(argv[5]);
+        request.stem = "glyph";
+        request.settings_node_id = std::move(*node_id);
+        return finish_glyph_export(*recipe, std::move(request));
+    }
+
+    if (action == L"glyph-frame") {
+        if (argc != 8) {
+            print_usage();
+            return 2;
+        }
+        auto recipe = load_recipe(std::filesystem::path(argv[3]));
+        auto node_id = parse_ascii_node_id(std::wstring_view(argv[4]));
+        auto tick = parse_u64(argv[5]);
+        auto format = parse_glyph_format(std::wstring_view(argv[7]));
+        if (!recipe || !node_id || !tick || !format) {
+            std::cerr << "glyph frame export error: require ASCII settings node, unsigned tick, and text or ansi format\n";
+            return 2;
+        }
+        exporting::GlyphExportRequest request;
+        request.kind = exporting::GlyphExportKind::single;
+        request.format = *format;
+        request.tick = *tick;
+        request.destination_directory = std::filesystem::path(argv[6]);
+        request.stem = "glyph";
+        request.settings_node_id = std::move(*node_id);
+        return finish_glyph_export(*recipe, std::move(request));
+    }
+
+    if (action == L"glyph-sequence") {
+        if (argc != 9) {
+            print_usage();
+            return 2;
+        }
+        auto recipe = load_recipe(std::filesystem::path(argv[3]));
+        auto node_id = parse_ascii_node_id(std::wstring_view(argv[4]));
+        auto start = parse_u64(argv[5]);
+        auto end = parse_u64(argv[6]);
+        auto format = parse_glyph_format(std::wstring_view(argv[8]));
+        if (!recipe || !node_id || !start || !end || !format) {
+            std::cerr << "glyph sequence export error: require ASCII settings node, unsigned ticks, and text or ansi format\n";
+            return 2;
+        }
+        exporting::GlyphExportRequest request;
+        request.kind = exporting::GlyphExportKind::sequence;
+        request.format = *format;
+        request.start_tick = *start;
+        request.end_tick = *end;
+        request.destination_directory = std::filesystem::path(argv[7]);
+        request.stem = "glyph";
+        request.settings_node_id = std::move(*node_id);
+        return finish_glyph_export(*recipe, std::move(request));
     }
 
     if (action == L"still") {

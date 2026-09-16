@@ -43,6 +43,7 @@ endfunction()
 add_library(artminer_core STATIC
     src/core/animation.cpp
     src/core/breeding.cpp
+    src/core/glyph_nodes.cpp
     src/core/graph.cpp
     src/core/growth_nodes.cpp
     src/core/hash.cpp
@@ -57,6 +58,7 @@ target_include_directories(artminer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src
 artminer_apply_warnings(artminer_core)
 
 add_library(artminer_nodes STATIC
+    src/nodes/glyph_synthesis.cpp
     src/nodes/growth_evaluator.cpp
     src/nodes/motion_evaluator.cpp
     src/nodes/static_evaluator.cpp
@@ -88,6 +90,7 @@ artminer_apply_warnings(artminer_platform_windows)
 
 add_library(artminer_export_windows STATIC
     src/export/export.cpp
+    src/export/glyph_export.cpp
     src/export/windows/wic_image.cpp
     src/export/windows/wic_png.cpp
 )
@@ -108,6 +111,7 @@ add_executable(ArtMiner
     src/app/browser_window.cpp
     src/app/export_command.cpp
     src/app/export_window.cpp
+    src/app/glyph_preview_window.cpp
     src/app/lineage_window.cpp
     src/app/main.cpp
     src/app/playback_window.cpp
@@ -240,6 +244,17 @@ target_link_libraries(ArtMinerQuarryDiversityTests PRIVATE
 target_compile_definitions(ArtMinerQuarryDiversityTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerQuarryDiversityTests)
 
+add_executable(ArtMinerGlyphTests
+    tests/glyph_synthesis_test.cpp
+)
+target_link_libraries(ArtMinerGlyphTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_export_windows
+)
+target_compile_definitions(ArtMinerGlyphTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+artminer_apply_warnings(ArtMinerGlyphTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
@@ -251,6 +266,7 @@ add_test(NAME artminer.export COMMAND ArtMinerExportTests)
 add_test(NAME artminer.quarry COMMAND ArtMinerQuarryTests)
 add_test(NAME artminer.quarry-thumbnail COMMAND ArtMinerQuarryThumbnailTests)
 add_test(NAME artminer.quarry-diversity COMMAND ArtMinerQuarryDiversityTests)
+add_test(NAME artminer.glyph-ansi COMMAND ArtMinerGlyphTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
@@ -261,6 +277,9 @@ add_test(NAME artminer.recipe.validate COMMAND ArtMiner recipe validate "${CMAKE
 set_tests_properties(artminer.recipe.validate PROPERTIES PASS_REGULAR_EXPRESSION "valid b9aed1288926e59c8c40115733cd32bf")
 add_test(NAME artminer.recipe.inspect COMMAND ArtMiner recipe inspect "${CMAKE_CURRENT_SOURCE_DIR}/examples/am002-minimal.amr")
 set_tests_properties(artminer.recipe.inspect PROPERTIES PASS_REGULAR_EXPRESSION "fingerprint: b9aed1288926e59c8c40115733cd32bf")
+add_test(
+    NAME artminer.recipe.validate.glyph
+    COMMAND ArtMiner recipe validate "${CMAKE_CURRENT_SOURCE_DIR}/examples/am012-glyph-x-lines.amr")
 add_test(
     NAME artminer.render.reference
     COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am003-fbm-warp.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am003-fbm-warp.png")
