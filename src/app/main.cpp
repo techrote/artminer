@@ -1,17 +1,23 @@
+#include <cerrno>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "app/browser_window.hpp"
+#include "app/playback_window.hpp"
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
 #include "core/version.hpp"
 #include "export/windows/wic_png.hpp"
+#include "nodes/motion_evaluator.hpp"
 #include "nodes/static_evaluator.hpp"
 #include "platform/windows/portable_workspace.hpp"
 
@@ -33,17 +39,22 @@ void print_help() {
         << "Usage: ArtMiner [options]\n"
         << "       ArtMiner recipe validate <file.amr>\n"
         << "       ArtMiner recipe inspect <file.amr>\n"
-        << "       ArtMiner render <file.amr> <output.png>\n\n"
+        << "       ArtMiner render <file.amr> <output.png>\n"
+        << "       ArtMiner render-tick <file.amr> <tick> <output.png>\n"
+        << "       ArtMiner render-range <file.amr> <start> <end> <output-dir>\n"
+        << "       ArtMiner animate <file.amr>\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
         << "  --version              Show product/version information.\n"
         << "  --workspace <path>     Use an explicit portable workspace root.\n"
         << "  --check-workspace      Validate/create the workspace layout and exit.\n"
         << "  --open <file.amr>      Open a recipe in the specimen browser.\n\n"
-        << "Headless recipe/render commands use the canonical CPU reference path and\n"
-        << "do not open the GUI. PNG renders are accompanied by deterministic\n"
-        << "<output>.artminer.txt provenance containing the complete recipe.\n\n"
-        << "Without a headless command ArtMiner opens the native 4x4 specimen browser.\n"
+        << "Static render uses the AM-003 canonical CPU path. render-tick and render-range\n"
+        << "use the AM-007 canonical fixed-tick motion/feedback path. PNG renders are\n"
+        << "accompanied by deterministic provenance sidecars. animate opens the native\n"
+        << "pause/play, single-step, reset and preview-speed inspector; speed changes\n"
+        << "wall-clock playback only and never changes the requested simulation tick.\n\n"
+        << "Without a command ArtMiner opens the native 4x4 specimen browser.\n"
         << "Mutation and seed-only variation are deterministic from explicit seeds.\n"
         << "Main shortcuts: M mutate, N seed variants, F favourite, arrow keys select,\n"
         << "Enter choose parent, Alt+Left/Right history, Ctrl+O open, Ctrl+S save.\n";
@@ -134,6 +145,19 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
     return recipe;
 }
 
+[[nodiscard]] std::optional<artminer::core::u64> parse_tick(const wchar_t* text) {
+    if (text == nullptr || *text == L'\0' || *text == L'-') {
+        return std::nullopt;
+    }
+    errno = 0;
+    wchar_t* end = nullptr;
+    const unsigned long long value = std::wcstoull(text, &end, 10);
+    if (errno == ERANGE || end == text || end == nullptr || *end != L'\0') {
+        return std::nullopt;
+    }
+    return static_cast<artminer::core::u64>(value);
+}
+
 [[nodiscard]] int run_recipe_command(const int argc, wchar_t* argv[]) {
     if (argc != 4) {
         std::cerr << "usage: ArtMiner recipe <validate|inspect> <file.amr>\n";
@@ -200,6 +224,108 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
     return 0;
 }
 
+[[nodiscard]] int write_animation_frame(
+    const artminer::core::Recipe& recipe,
+    const artminer::core::u64 tick,
+    const std::filesystem::path& output_path,
+    artminer::nodes::FrameSnapshotCache* cache) {
+    auto rendered = artminer::nodes::render_animation_reference(recipe, tick, "main", cache);
+    if (rendered.is_error()) {
+        std::cerr << "animation render error at tick " << tick << ": " << rendered.error().message << '\n';
+        return 7;
+    }
+    artminer::nodes::Image image = std::move(rendered).value();
+    artminer::core::Recipe provenance_recipe = recipe;
+    provenance_recipe.metadata.push_back({"render.tick", std::to_string(tick)});
+    auto written = artminer::exporting::windows::write_png_with_provenance(output_path, image, provenance_recipe);
+    if (written.is_error()) {
+        std::cerr << "export error: " << written.error().message << '\n';
+        return 8;
+    }
+    const std::string image_hash = artminer::nodes::image_fingerprint(image);
+    const std::string recipe_hash = artminer::core::semantic_fingerprint(recipe);
+    const std::wstring image_hash_wide(image_hash.begin(), image_hash.end());
+    const std::wstring recipe_hash_wide(recipe_hash.begin(), recipe_hash.end());
+    std::wcout << L"rendered tick " << tick << L" " << output_path.wstring() << L" "
+               << image.width << L"x" << image.height << L" image-hash " << image_hash_wide
+               << L" recipe " << recipe_hash_wide << L'\n';
+    return 0;
+}
+
+[[nodiscard]] int run_render_tick_command(const int argc, wchar_t* argv[]) {
+    if (argc != 5) {
+        std::cerr << "usage: ArtMiner render-tick <file.amr> <tick> <output.png>\n";
+        return 2;
+    }
+    const auto tick = parse_tick(argv[3]);
+    if (!tick.has_value()) {
+        std::cerr << "render-tick error: tick must be an unsigned integer\n";
+        return 2;
+    }
+    auto recipe = load_validated_recipe(std::filesystem::path(argv[2]));
+    if (!recipe.has_value()) {
+        return 6;
+    }
+    artminer::nodes::FrameSnapshotCache cache(8U);
+    return write_animation_frame(*recipe, *tick, std::filesystem::path(argv[4]), &cache);
+}
+
+[[nodiscard]] std::filesystem::path range_frame_path(
+    const std::filesystem::path& directory,
+    const artminer::core::u64 tick) {
+    std::wostringstream name;
+    name << L"tick-" << std::setw(10) << std::setfill(L'0') << tick << L".png";
+    return directory / name.str();
+}
+
+[[nodiscard]] int run_render_range_command(const int argc, wchar_t* argv[]) {
+    if (argc != 6) {
+        std::cerr << "usage: ArtMiner render-range <file.amr> <start> <end> <output-dir>\n";
+        return 2;
+    }
+    const auto start = parse_tick(argv[3]);
+    const auto end = parse_tick(argv[4]);
+    if (!start.has_value() || !end.has_value() || *end < *start || *end - *start >= 256U) {
+        std::cerr << "render-range error: require unsigned start <= end with at most 256 inclusive frames\n";
+        return 2;
+    }
+    auto recipe = load_validated_recipe(std::filesystem::path(argv[2]));
+    if (!recipe.has_value()) {
+        return 6;
+    }
+    const std::filesystem::path output_directory(argv[5]);
+    std::error_code directory_error;
+    std::filesystem::create_directories(output_directory, directory_error);
+    if (directory_error) {
+        std::cerr << "render-range error: could not create output directory\n";
+        return 8;
+    }
+
+    artminer::nodes::FrameSnapshotCache cache(32U);
+    for (artminer::core::u64 tick = *start;; ++tick) {
+        const int status = write_animation_frame(*recipe, tick, range_frame_path(output_directory, tick), &cache);
+        if (status != 0) {
+            return status;
+        }
+        if (tick == *end) {
+            break;
+        }
+    }
+    return 0;
+}
+
+[[nodiscard]] int run_animate_command(const int argc, wchar_t* argv[]) {
+    if (argc != 3) {
+        std::cerr << "usage: ArtMiner animate <file.amr>\n";
+        return 2;
+    }
+    auto recipe = load_validated_recipe(std::filesystem::path(argv[2]));
+    if (!recipe.has_value()) {
+        return 6;
+    }
+    return artminer::app::run_playback_application(*recipe);
+}
+
 }  // namespace
 
 int wmain(const int argc, wchar_t* argv[]) {
@@ -210,6 +336,15 @@ int wmain(const int argc, wchar_t* argv[]) {
     }
     if (argc >= 2 && std::wstring_view(argv[1]) == L"render") {
         return run_render_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"render-tick") {
+        return run_render_tick_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"render-range") {
+        return run_render_range_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"animate") {
+        return run_animate_command(argc, argv);
     }
 
     CommandLine command_line;
