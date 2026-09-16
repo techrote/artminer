@@ -109,6 +109,7 @@ struct Recipe;
 enum class ValidationErrorCode {
     unsupported_schema_version,
     unsupported_evaluator_version,
+    resource_limit,
     invalid_render_settings,
     invalid_identifier,
     duplicate_node_id,
