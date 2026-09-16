@@ -251,8 +251,14 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
                 "input port accepts only one edge: " + edge.to_node + "." + edge.to_port);
         }
 
-        adjacency[from_index->second].push_back(to_index->second);
-        ++indegree[to_index->second];
+        // A state boundary deliberately breaks the same-tick dependency graph.
+        // Its `next` input belongs to tick N-1 when the boundary is observed at
+        // tick N. Every non-boundary edge remains a same-tick dependency, so an
+        // ordinary cycle is still rejected by the topological check below.
+        if (to_metadata->state_class != NodeStateClass::state_boundary) {
+            adjacency[from_index->second].push_back(to_index->second);
+            ++indegree[to_index->second];
+        }
     }
 
     for (const auto& [node_id, metadata] : node_metadata) {
@@ -320,7 +326,7 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
         add_error(
             errors,
             ValidationErrorCode::cycle_detected,
-            "ordinary graph cycles are invalid; state feedback remains reserved for a later explicit boundary contract");
+            "ordinary graph cycles are invalid; feedback is legal only through an explicit state boundary");
     }
 
     return errors;
