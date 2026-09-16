@@ -1,6 +1,7 @@
 #include "quarry/quarry.hpp"
 
 #include <string>
+#include <utility>
 
 #include "core/prng.hpp"
 #include "core/specimen_browser.hpp"
