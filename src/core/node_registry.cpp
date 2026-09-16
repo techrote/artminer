@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "core/growth_nodes.hpp"
+
 namespace artminer::core {
 namespace {
 
@@ -459,6 +461,7 @@ namespace {
         unavailable,
     });
 
+    append_growth_node_metadata(nodes);
     return nodes;
 }
 

@@ -1,0 +1,20 @@
+# Gray-Scott reaction-diffusion at an explicit fixed simulation tick.
+amr 1
+evaluator 1
+seed 6001
+render 128 128 "reference"
+node "growth" "core.growth.reaction_diffusion" 1
+param "growth" "tick" i64 160
+param "growth" "feed" f64 0.0367
+param "growth" "kill" f64 0.0649
+param "growth" "diffusion_a" f64 1
+param "growth" "diffusion_b" f64 0.5
+param "growth" "dt" f64 1
+param "growth" "seed_radius" f64 0.09
+param "growth" "seed_noise" f64 0.008
+param "growth" "boundary" enum "repeat"
+node "image" "core.image.from_scalar" 1
+param "image" "palette" enum "heat"
+edge "growth" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "reaction-diffusion"

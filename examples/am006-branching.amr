@@ -1,0 +1,18 @@
+# Stable-ID fixed-tick branching/deposition growth; children start on the next tick.
+amr 1
+evaluator 1
+seed 6004
+render 128 128 "reference"
+node "growth" "core.growth.branching" 1
+param "growth" "tick" i64 180
+param "growth" "initial_tips" i64 4
+param "growth" "max_tips" i64 160
+param "growth" "branch_probability" f64 0.045
+param "growth" "turn_probability" f64 0.28
+param "growth" "deposit" f64 0.1
+param "growth" "boundary" enum "clamp"
+node "image" "core.image.from_scalar" 1
+param "image" "palette" enum "heat"
+edge "growth" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "branching-growth"
