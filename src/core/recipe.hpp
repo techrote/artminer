@@ -13,6 +13,11 @@ namespace artminer::core {
 
 inline constexpr u32 kRecipeSchemaVersion = 1U;
 inline constexpr u32 kEvaluatorSemanticVersion = 1U;
+inline constexpr std::size_t kMaximumRecipeNodes = 4096U;
+inline constexpr std::size_t kMaximumRecipeParameters = 65536U;
+inline constexpr std::size_t kMaximumRecipeEdges = 16384U;
+inline constexpr std::size_t kMaximumRecipeOutputs = 1024U;
+inline constexpr std::size_t kMaximumRecipeMetadata = 4096U;
 
 struct RenderSettings {
     u32 width{512U};
@@ -63,6 +68,7 @@ struct Recipe {
 
 enum class RecipeErrorCode {
     malformed,
+    resource_limit,
     unsupported_schema_version,
     unsupported_evaluator_version,
 };
