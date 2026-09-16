@@ -1,0 +1,17 @@
+# Deterministic Gray-Scott-style growth. Try --tick 80.
+amr 1
+evaluator 1
+seed 11936128518282651045
+render 128 128 "reference"
+node "growth" "core.growth.reaction_diffusion" 1
+param "growth" "diff_a" f64 0.16
+param "growth" "diff_b" f64 0.08
+param "growth" "feed" f64 0.035
+param "growth" "kill" f64 0.062
+param "growth" "dt" f64 0.8
+param "growth" "seed_density" f64 0.035
+param "growth" "boundary" enum "wrap"
+param "growth" "palette" enum "cyan"
+output "main" "growth" "image"
+meta "example.family" "reaction-diffusion"
+meta "example.recommended_tick" "80"
