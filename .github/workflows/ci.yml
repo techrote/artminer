@@ -12,7 +12,7 @@ permissions:
 jobs:
   windows-build-test:
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -26,3 +26,18 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Representative release benchmark
+        run: .\build\Release\ArtMinerReleaseBenchmark.exe
+
+      - name: Package and smoke-test portable layout
+        shell: cmd
+        run: scripts\0Package.cmd
+
+      - name: Publish portable Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArtMiner-1.0.0-win-x64
+          path: dist/ArtMiner-1.0.0-win-x64.zip
+          if-no-files-found: error
+          retention-days: 7
