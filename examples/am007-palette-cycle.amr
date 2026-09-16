@@ -1,0 +1,23 @@
+# Palette order advances by requested fixed tick, independent of display cadence.
+amr 1
+evaluator 1
+seed 7004
+render 144 144 "reference"
+node "radial" "core.scalar.radial" 1
+param "radial" "center_x" f64 0.5
+param "radial" "center_y" f64 0.5
+param "radial" "scale" f64 1.25
+node "palette" "core.palette.default" 1
+param "palette" "preset" enum "cool"
+node "cycle" "core.palette.cycle" 1
+param "cycle" "rate" i64 1
+param "cycle" "phase" i64 0
+node "colour" "core.colour.from_palette" 1
+param "colour" "mode" enum "linear"
+node "image" "core.image.from_colour" 1
+edge "palette" "value" "cycle" "palette"
+edge "radial" "value" "colour" "source"
+edge "cycle" "value" "colour" "palette"
+edge "colour" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "palette-cycle"
