@@ -127,8 +127,8 @@ Key subsystem documents include:
 - [`docs/growth-systems.md`](docs/growth-systems.md) — fixed-tick growth;
 - [`docs/motion-feedback.md`](docs/motion-feedback.md) — particles, feedback, playback and snapshots;
 - [`docs/breeding-lineage.md`](docs/breeding-lineage.md) — crossover, lineage and diff;
-- [`docs/quarry.md`](docs/quarry.md) and related Quarry docs — deterministic batch/search semantics;
-- [`docs/glyph-synthesis.md`](docs/glyph-synthesis.md) — glyph/ANSI mapping/export;
-- [`docs/material-workflows.md`](docs/material-workflows.md) — material outputs, seams and loops;
-- [`docs/topology-mutation.md`](docs/topology-mutation.md) — deterministic structural mutation;
+- [`docs/quarry.md`](docs/quarry.md) and [`docs/quarry-diversity.md`](docs/quarry-diversity.md) — deterministic batch/search and diversity semantics;
+- [`docs/glyph-terminal.md`](docs/glyph-terminal.md) — glyph/ANSI mapping/export;
+- [`docs/am013-material-workflows.md`](docs/am013-material-workflows.md) — material outputs, seams and loops;
+- [`docs/am014-topology-mutation.md`](docs/am014-topology-mutation.md) — deterministic structural mutation;
 - [`docs/release-readiness.md`](docs/release-readiness.md) — AM-015 v1 audit, hard limits, recovery, packaging and benchmark method.
