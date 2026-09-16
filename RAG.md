@@ -1,6 +1,6 @@
 # ArtMiner — RAG / authoritative implementation plan
 
-> **Status:** authoritative project plan for the initial implementation series.  
+> **Status:** authoritative project plan for the initial implementation series and accepted post-v1 architecture checkpoints.  
 > **Product name:** **ArtMiner**. “Quarry” is the batch-search/prospecting mode inside the application.  
 > **Repository:** `techrote/artminer`.  
 > **Primary platform:** Windows 10/11 x64.  
@@ -450,6 +450,7 @@ Issues are intended to be implemented **serially in the listed order** unless th
 | AM-013 | Material + loop workflows | seamless tiling diagnostics, masks/height/normal workflows, loop construction/validation |
 | AM-014 | Topology mutation | type-safe deterministic graph insertion/removal/replacement/rewrites with lineage provenance |
 | AM-015 | Release hardening | profiling, crash/recovery validation, portable packaging, documentation and v1 readiness audit |
+| AM-016 | Fork-readiness checkpoint | explicit generic engine target, catalog-driven parameter relations, engine-only custom-registry proof, downstream fork contract |
 
 Issue bodies are the immediate scope contract; this RAG remains the architectural contract.
 
@@ -497,3 +498,17 @@ The following are intentionally not guessed by the initial plan:
 - whether an optional learned similarity/novelty model is ever desirable.
 
 These choices are not blockers for AM-001 through the core implementation series. Do not invent a licence or introduce AI/network dependencies to fill an unspecified choice.
+
+---
+
+## 15. Post-v1 reusable-engine boundary
+
+AM-016 establishes a deliberate fork point without redefining ArtMiner as a separate commercial product. ArtMiner remains the procedural-art toy/tool and proving environment; the reusable asset is its deterministic substrate.
+
+The CMake target `artminer_engine` is the domain-neutral boundary. It owns graph contracts and validation, node-registry mechanics, recipe parsing/canonicalization/fingerprints, PRNG and hashing. `artminer_core` layers the ArtMiner built-in node catalog and ArtMiner-specific exploration/model semantics above that substrate, with evaluators, Quarry, export, GPU, application and platform layers above it.
+
+Generic validation must not acquire concrete ArtMiner node-type tests. Cross-parameter legality is declared by node metadata and interpreted by the generic validator. Downstream projects are expected to provide their own catalogs and domain execution/observation/annotation layers rather than adding domain identities to `artminer_engine`.
+
+This boundary is intentionally narrower than a plugin system. AM-016 does not establish a dynamic ABI, runtime DLL loading, universal tensor model, cross-platform support, dataset framework, ML integration, semiconductor process model, or proprietary domain schema. Those contracts should be introduced only when a downstream use case requires them.
+
+The merged AM-016 commit SHA is the canonical downstream ancestry checkpoint. `docs/fork-readiness.md` defines what a fork should preserve and what it should replace. Existing ArtMiner recipe schema/evaluator semantics remain unchanged by the boundary extraction; incompatible downstream semantics require an explicit new identity/version rather than reinterpretation of ArtMiner version 1 files.
