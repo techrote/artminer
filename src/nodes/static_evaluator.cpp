@@ -20,6 +20,7 @@
 #include "core/graph.hpp"
 #include "core/hash.hpp"
 #include "core/prng.hpp"
+#include "nodes/growth_evaluator.hpp"
 
 namespace artminer::nodes {
 namespace {
@@ -451,6 +452,18 @@ private:
             return std::get<Palette>(*inputs.at(std::string(name)));
         };
 
+        if (is_growth_node(node.type_id)) {
+            auto growth = evaluate_growth_node(recipe_, node, width_, height_);
+            if (growth.is_error()) {
+                const EvaluationErrorCode code = growth.error().code == GrowthErrorCode::resource_limit
+                    ? EvaluationErrorCode::resource_limit
+                    : EvaluationErrorCode::invalid_recipe;
+                return core::Result<Value, EvaluationError>::failure(make_error(code, growth.error().message));
+            }
+            GrowthField field = std::move(growth).value();
+            return core::Result<Value, EvaluationError>::success(
+                ScalarField{field.width, field.height, std::move(field.values)});
+        }
         if (node.type_id == "core.scalar.constant") {
             const double value = real_parameter(node, "value");
             return core::Result<Value, EvaluationError>::success(make_scalar(
