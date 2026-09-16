@@ -21,11 +21,13 @@ Every useful result should remain traceable to the recipe and deterministic stat
 
 ## Current state
 
-AM-001 established the native deterministic foundation, AM-002 established the versioned `.amr` recipe/typed-graph substrate, and AM-003 added the canonical CPU/reference renderer and deterministic PNG/provenance export. AM-004 adds the first interactive native D3D11/DXGI preview while keeping the AM-003 CPU evaluator normative.
+AM-001 established the native deterministic foundation, AM-002 established the versioned `.amr` recipe/typed-graph substrate, AM-003 added the canonical CPU/reference renderer and deterministic PNG/provenance export, and AM-004 added the first interactive native D3D11/DXGI preview while keeping the AM-003 CPU evaluator normative. AM-005 adds the primary 4×4 specimen-browsing loop: deterministic parameter mutation, separate seed-only variation, parameter/group locks, reversible recipe history, portable favourites/saved recipes, metadata-driven parameter editing, and progressive bounded-worker thumbnail generation.
 
 The AM-003 reference node set covers normalized coordinates, radial/angular fields, deterministic value/gradient/Worley/fBm noise, scalar domain warp, basic SDF composition, threshold/quantisation, repeat/symmetry transforms, palette mapping, channel/luminance extraction, ordered dithering, and final RGBA8 image composition. PNG export uses Windows Imaging Component and writes a deterministic adjacent provenance sidecar containing the complete canonical recipe and semantic fingerprint.
 
-The AM-004 preview accelerates an explicitly supported pointwise subset with generated HLSL. Recipes containing unsupported GPU operations remain interactive by falling back clearly to the unchanged canonical CPU evaluator and uploading that exact result for D3D11 presentation; unsupported nodes are never silently approximated. The native status strip identifies GPU preview versus canonical CPU fallback and reports lightweight local frame/device diagnostics.
+The AM-004 preview accelerates an explicitly supported pointwise subset with generated HLSL. Recipes containing unsupported GPU operations remain interactive by falling back clearly to the unchanged canonical CPU evaluator and uploading that exact result for D3D11 presentation; unsupported nodes are never silently approximated. AM-005 reuses that preview for the currently selected specimen while rendering grid thumbnails progressively through the canonical CPU path.
+
+AM-005 mutation is driven by `NodeMetadata`: declared domains, integer/enumerated discreteness, logarithmic and periodic scales, mutability, and logical groups are authoritative. Per-parameter deterministic streams are derived from stable node/parameter identity, so serialization/traversal order does not alter the child. Generation returns 16 stable row-major recipe identities before thumbnail completion; workers may finish visually out of order without changing slot identity. See [`docs/specimen-browser.md`](docs/specimen-browser.md) for mutation, lock, history, persistence and shortcut semantics.
 
 Read [`RAG.md`](RAG.md) for the authoritative architecture, product contract, reviewed implementation plan, and milestone sequence. Read [`AGENTS.md`](AGENTS.md) before autonomous implementation work. The `.amr` grammar and compatibility rules are documented in [`docs/recipe-format.md`](docs/recipe-format.md); canonical raster/evaluator semantics are documented in [`docs/static-evaluator.md`](docs/static-evaluator.md); D3D11 capability, fallback, equivalence, resize, and device-loss behaviour are documented in [`docs/gpu-preview.md`](docs/gpu-preview.md).
 
@@ -89,7 +91,9 @@ Recipe and render commands are headless and do not require the GUI or a workspac
 
 AM-003 example families are available under `examples/am003-fbm-warp.amr`, `examples/am003-worley.amr`, `examples/am003-sdf.amr`, and `examples/am003-angular-repeat.amr`.
 
-With no headless command, ArtMiner validates its workspace and opens the native interactive preview. Use **File → Open Recipe…**, **Ctrl+O**, or `--open <file.amr>` to load a recipe. `am003-sdf.amr` exercises the AM-004 pointwise GPU evaluator; examples containing fBm/warp, Worley noise, or raster repeat use explicit canonical CPU fallback. Resize changes only presentation/layout and does not alter recipe render settings or fingerprints. Device removal/reset causes D3D resources to be reconstructed from the authoritative recipe.
+With no headless command, ArtMiner validates its workspace and opens the 4×4 native specimen browser. Use **File → Open Recipe…**, **Ctrl+O**, or `--open <file.amr>` to establish a parent. `M` generates parameter mutations, `N` generates seed-only variants, arrows move the active grid slot, `Enter` selects that recipe as the current parent, `F` toggles favourite status, `Alt+Left/Right` navigates recipe history, `Ctrl+S` saves a selected recipe copy, and `Ctrl+Shift+F` advances through persisted favourites. The seed and mutation strength controls are explicit and reproducible. The parameter panel supports validated edits plus individual and logical-group mutation locks.
+
+The selected specimen uses the AM-004 preview path: supported pointwise graphs use GPU preview and unsupported graphs use explicit canonical CPU fallback. Window/layout changes, thumbnail completion timing, history navigation and lock toggles do not change recipe semantics unless an explicit recipe edit/mutation is performed.
 
 By default the workspace root is the directory containing `ArtMiner.exe`; an explicit `--workspace` path replaces it. ArtMiner does not silently fall back to the registry or an unrelated profile directory if that location is unwritable.
 
@@ -98,10 +102,14 @@ The portable workspace contains/creates:
 ```text
 <workspace>/
 ├── recipes/
+│   ├── saved/                 # created on first explicit save
+│   └── favourites/            # created on first favourite
 ├── palettes/
 ├── output/
 └── cache/
 ```
+
+Saved/favourite filenames use the semantic recipe fingerprint. Recipe writes are performed through same-directory temporary files and atomic Windows replacement. Favourites are validated and reloaded on the next normal application start; UI-only history is intentionally not persisted into recipe semantics.
 
 ## Recipe and graph baseline
 
@@ -131,3 +139,5 @@ AM-001 fixed the low-level deterministic contracts and protects them with commit
 AM-003 static noise nodes derive local seeds from the recipe root seed and stable node identity instead of consuming shared RNG state. Canonical evaluation therefore does not depend on graph traversal order, worker scheduling, wall-clock time, locale, or pointer identity.
 
 AM-004 preserves that contract: GPU preview is explicitly non-canonical where floating point can differ, WARP-backed equivalence tests compare supported preview graphs against the CPU oracle within documented tolerances, and canonical fallback returns the CPU reference image rather than changing graph meaning.
+
+AM-005 extends the deterministic contract to visual browsing. A mutation is identified by parent semantic fingerprint, explicit mutation seed, operator version and strength; each parameter gets a stable local PRNG stream. Seed-only variation is a separate operation. Grid candidate enumeration is independent of worker scheduling, and history/favourite UI state cannot silently alter semantic recipe identity.

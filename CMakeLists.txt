@@ -15,7 +15,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
-    # Keep the shipped binary independent of a separately installed VC runtime.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
@@ -47,6 +46,7 @@ add_library(artminer_core STATIC
     src/core/node_registry.cpp
     src/core/prng.cpp
     src/core/recipe.cpp
+    src/core/specimen_browser.cpp
 )
 target_include_directories(artminer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 artminer_apply_warnings(artminer_core)
@@ -59,6 +59,7 @@ target_link_libraries(artminer_nodes PUBLIC artminer_core)
 artminer_apply_warnings(artminer_nodes)
 
 add_library(artminer_platform_windows STATIC
+    src/platform/windows/browser_store.cpp
     src/platform/windows/portable_workspace.cpp
 )
 target_include_directories(artminer_platform_windows PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -83,6 +84,7 @@ target_compile_definitions(artminer_gpu_windows PRIVATE UNICODE _UNICODE WIN32_L
 artminer_apply_warnings(artminer_gpu_windows)
 
 add_executable(ArtMiner
+    src/app/browser_window.cpp
     src/app/main.cpp
 )
 target_link_libraries(ArtMiner PRIVATE
@@ -122,9 +124,20 @@ target_link_libraries(ArtMinerGpuTests PRIVATE
 target_compile_definitions(ArtMinerGpuTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerGpuTests)
 
+add_executable(ArtMinerSpecimenTests
+    tests/specimen_browser_test.cpp
+)
+target_link_libraries(ArtMinerSpecimenTests PRIVATE
+    artminer_core
+    artminer_platform_windows
+)
+target_compile_definitions(ArtMinerSpecimenTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerSpecimenTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
+add_test(NAME artminer.specimen-browser COMMAND ArtMinerSpecimenTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
