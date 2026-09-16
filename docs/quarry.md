@@ -8,7 +8,7 @@ Quarry is ArtMiner's reproducible batch-prospecting engine. A Quarry job is not 
 
 Candidate `i` derives its mutation seed only from the manifest root seed, candidate index, and candidate-enumeration contract. It then uses the accepted AM-005 parameter mutation operator. The candidate ID hashes the immutable job identity, absolute candidate index, and resulting recipe fingerprint. Worker scheduling, cache state, completion order, and cancellation timing are therefore not candidate inputs.
 
-Results are committed strictly in ascending candidate-index order. Parallel work happens only inside a bounded batch of at most the requested worker count. Full rendered images exist only inside those active worker evaluations and are discarded after metric extraction. The authoritative population is streamed to the results file rather than retained as a vector of full-resolution images.
+Results are committed strictly in ascending candidate-index order. Parallel work happens only inside a bounded batch of at most the requested worker count, and the engine rejects worker counts outside `1..64`. Each active worker owns at most one candidate evaluation; the canonical evaluator's own pixel/node/state limits bound that evaluation. Full rendered images exist only inside those active evaluations and are discarded after metric extraction. The authoritative population is streamed to the results file rather than retained as a vector of full-resolution images, so increasing candidate count does not increase resident image population state.
 
 ## Checkpoint and resume contract
 
@@ -16,13 +16,17 @@ A job uses sibling files derived from the manifest path:
 
 - `<job>.amq.checkpoint` — manifest identity, committed-prefix length, results checksum, completion flag;
 - `<job>.amq.results.tsv` — append-only canonical candidate rows in index order;
-- `<job>.amq.cache/` — disposable per-candidate metric cache entries for the thumbnail/metric render contract.
+- `<job>.amq.cache/` — disposable metric (`.qcache`) and read-through thumbnail (`.qthumb`) cache entries.
 
 Resume verifies the checkpoint identity, completion state, committed count, results header, every committed candidate index/metric field, and an FNV checksum of the complete committed results prefix before any new work begins. A checkpoint without results, results without a checkpoint, a mismatched identity, malformed fields, non-contiguous indices, or checksum disagreement fails with an actionable error. ArtMiner does not guess how to repair an ambiguous prefix.
 
 Cancellation is observed before a new bounded worker batch and after a completed batch. A batch already executing is allowed to finish and is committed in index order before the job stops. This keeps the disk state as a simple contiguous prefix. Resuming with any legal worker count continues at exactly the next uncommitted candidate.
 
-Cache entries include metric semantic version, evaluator version, candidate recipe fingerprint, thumbnail/metric render dimensions, animation sampling, and ordered metric selection. Missing, stale, malformed, or incompatible cache entries are safe misses. Cache write failure does not invalidate a job. Deleting the cache can change runtime only; it cannot change candidate identity or metric values. The rendered image used to extract metrics is bounded by the manifest render dimensions and is not authoritative population state; a future consumer may regenerate that deterministic thumbnail from the same candidate identity if the disposable cache is absent.
+Metric cache identity includes metric semantic version, evaluator version, candidate recipe fingerprint, thumbnail/metric render dimensions, animation sampling, and ordered metric selection. Missing, stale, malformed, or incompatible metric entries are safe misses. Cache write failure does not invalidate a job. Deleting the metric cache can change runtime only; it cannot change candidate identity or metric values.
+
+Thumbnail caching is separate and read-through. `read_cached_thumbnail` reconstructs the same deterministic candidate recipe and addresses the first sampled canonical frame by a key containing thumbnail-cache version, job identity, candidate index, candidate recipe fingerprint, evaluator version, render dimensions, and animation sampling. The `.qthumb` entry stores dimensions, canonical RGBA8 bytes, and an image fingerprint. Missing, stale, truncated, malformed, or checksum-mismatched thumbnail entries are regenerated from the manifest and replaced best-effort. The thumbnail cache is therefore disposable rather than authoritative.
+
+The rendered image used to extract metrics is bounded by the manifest render dimensions and is not authoritative population state. A consumer may regenerate the same deterministic thumbnail from candidate identity if either cache family is absent.
 
 ## Metric semantics
 
@@ -69,6 +73,6 @@ ArtMiner quarry ui <job.amq>
 
 `create` defaults to the documented still-image metric set, seed `1`, and a 128×128 thumbnail/metric render. `--metrics` records an explicit ordered subset of supported metric names. Animated jobs opt into `motion_energy` and/or `temporal_flicker` and provide at least two fixed-tick samples using `--animation`; the manifest validator rejects animation metrics without sufficient samples. These selections are part of job identity, while worker count is not.
 
-`run` and `resume` intentionally call the same engine: a new job has a zero-length committed prefix, while an existing job is verified and continued. `inspect` validates the manifest/checkpoint/results relationship before reporting progress and the fixed-tick sampling contract. The native Quarry window uses the same engine and exposes Run/Resume, Cancel, Refresh, progress, and raw metric-result browsing; it does not maintain a separate search implementation.
+`run` and `resume` intentionally call the same engine: a new job has a zero-length committed prefix, while an existing job is verified and continued. `inspect` validates the manifest/checkpoint/results relationship before reporting progress and the fixed-tick sampling contract. The native Quarry window uses the same engine and exposes Run/Resume, Cancel, Refresh, progress, and bounded raw metric-result browsing; it does not maintain a separate search implementation.
 
 AM-011 owns clustering, deduplication, unusual-distance ranking, and neighbourhood search. AM-010 raw metrics are intentionally inspectable rather than collapsed into a taste/novelty score.
