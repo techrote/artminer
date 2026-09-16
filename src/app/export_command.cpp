@@ -28,7 +28,9 @@ namespace {
         std::wcerr << L"export error: could not open recipe " << path.wstring() << L'\n';
         return std::nullopt;
     }
-    std::string text(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+    std::string text{
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()};
     if (!input.good() && !input.eof()) {
         std::wcerr << L"export error: failed while reading recipe " << path.wstring() << L'\n';
         return std::nullopt;
@@ -83,6 +85,21 @@ namespace {
         return exporting::RasterFormat::raw_rgba;
     }
     return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::string> parse_ascii_node_id(const std::wstring_view text) {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    std::string result;
+    result.reserve(text.size());
+    for (const wchar_t value : text) {
+        if (value < 0 || value > 0x7f) {
+            return std::nullopt;
+        }
+        result.push_back(static_cast<char>(value));
+    }
+    return result;
 }
 
 void print_usage() {
@@ -265,8 +282,12 @@ int run_export_command(const int argc, wchar_t* argv[]) {
         }
         request.destination_directory = std::filesystem::path(argv[5]);
         request.stem = "palette";
-        const std::wstring_view node_id(argv[4]);
-        request.palette_node_id.assign(node_id.begin(), node_id.end());
+        auto node_id = parse_ascii_node_id(std::wstring_view(argv[4]));
+        if (!node_id) {
+            std::cerr << "export error: palette node id must be non-empty ASCII\n";
+            return 2;
+        }
+        request.palette_node_id = std::move(*node_id);
         return finish_export(*recipe, std::move(request));
     }
 
