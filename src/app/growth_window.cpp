@@ -63,7 +63,9 @@ void render_tick(HWND window, WindowState& state, const core::u64 tick) {
     if (rendered.is_error()) {
         std::wstring message = L"Render error: ";
         const std::string& narrow = rendered.error().message;
-        message.append(narrow.begin(), narrow.end());
+        for (const unsigned char value : narrow) {
+            message.push_back(static_cast<wchar_t>(value));
+        }
         set_status(state, message);
         return;
     }
@@ -144,8 +146,8 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
             GetClientRect(window, &client);
             const int left = 14;
             const int top = 88;
-            const int available_width = (std::max)(1, client.right - left - 14);
-            const int available_height = (std::max)(1, client.bottom - top - 14);
+            const int available_width = (std::max)(1, static_cast<int>(client.right) - left - 14);
+            const int available_height = (std::max)(1, static_cast<int>(client.bottom) - top - 14);
             const double sx = static_cast<double>(available_width) / static_cast<double>(state->image.width);
             const double sy = static_cast<double>(available_height) / static_cast<double>(state->image.height);
             const double scale = (std::min)(sx, sy);
