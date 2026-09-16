@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -53,7 +54,8 @@ private:
 [[nodiscard]] core::Result<void, ExportError> write_sidecar(
     const std::filesystem::path& path,
     const nodes::Image& image,
-    const core::Recipe& recipe) {
+    const core::Recipe& recipe,
+    const std::optional<core::u64> simulation_tick) {
     std::ofstream output(path, std::ios::binary | std::ios::trunc);
     if (!output) {
         return core::Result<void, ExportError>::failure(ExportError{
@@ -65,8 +67,11 @@ private:
            << "schema " << recipe.schema_version << '\n'
            << "evaluator " << recipe.evaluator_version << '\n'
            << "width " << image.width << '\n'
-           << "height " << image.height << '\n'
-           << "pixel-format RGBA8-straight-sRGB-encoding\n"
+           << "height " << image.height << '\n';
+    if (simulation_tick.has_value()) {
+        output << "simulation-tick " << *simulation_tick << '\n';
+    }
+    output << "pixel-format RGBA8-straight-sRGB-encoding\n"
            << "recipe-begin\n"
            << core::serialize_recipe_canonical(recipe)
            << "recipe-end\n";
@@ -89,7 +94,8 @@ std::filesystem::path provenance_sidecar_path(const std::filesystem::path& image
 core::Result<void, ExportError> write_png_with_provenance(
     const std::filesystem::path& image_path,
     const nodes::Image& image,
-    const core::Recipe& recipe) {
+    const core::Recipe& recipe,
+    const std::optional<core::u64> simulation_tick) {
     auto byte_count = core::checked_image_byte_count(image.width, image.height, 4U);
     if (byte_count.is_error() || byte_count.value() != static_cast<core::u64>(image.rgba.size())) {
         return core::Result<void, ExportError>::failure(ExportError{
@@ -192,7 +198,7 @@ core::Result<void, ExportError> write_png_with_provenance(
     }
 
     const std::filesystem::path sidecar = provenance_sidecar_path(image_path);
-    auto sidecar_result = write_sidecar(sidecar, image, recipe);
+    auto sidecar_result = write_sidecar(sidecar, image, recipe, simulation_tick);
     if (sidecar_result.is_error()) {
         std::error_code remove_error;
         std::filesystem::remove(image_path, remove_error);
