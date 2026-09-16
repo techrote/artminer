@@ -70,6 +70,16 @@ struct ParameterSpec {
     MutationMetadata mutation;
 };
 
+enum class ParameterRelationKind {
+    less_than,
+};
+
+struct ParameterRelation {
+    std::string left;
+    ParameterRelationKind relation{ParameterRelationKind::less_than};
+    std::string right;
+};
+
 enum class NodeStateClass {
     stateless,
     stateful,
@@ -89,6 +99,10 @@ struct NodeMetadata {
     std::vector<ParameterSpec> parameters;
     NodeStateClass state_class{NodeStateClass::stateless};
     EvaluatorCapabilities evaluators;
+    // Cross-parameter legality belongs to the catalog, not the generic validator.
+    // Relations are evaluated only after the referenced assignments have passed
+    // their ordinary type/domain checks.
+    std::vector<ParameterRelation> parameter_relations;
 };
 
 class NodeRegistry final {
