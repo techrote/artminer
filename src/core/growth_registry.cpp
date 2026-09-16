@@ -146,7 +146,7 @@ namespace {
         {output("image", DataKind::image)},
         {
             integer_parameter("initial_branches", 4, 1, 8, "population"),
-            integer_parameter("max_tips", 512, 1, 4096, "population"),
+            integer_parameter("max_tips", 512, 8, 4096, "population"),
             real_parameter("turn_chance", 0.18, 0.0, 1.0, "growth"),
             real_parameter("branch_chance", 0.035, 0.0, 1.0, "growth"),
             boundary_parameter("clamp", {"clamp", "wrap"}),
