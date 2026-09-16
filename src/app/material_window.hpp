@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iterator>
 #include <string>
 
 #include "core/recipe.hpp"
