@@ -74,6 +74,14 @@ target_link_libraries(artminer_export_windows PUBLIC artminer_core artminer_node
 target_compile_definitions(artminer_export_windows PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(artminer_export_windows)
 
+add_library(artminer_gpu_windows STATIC
+    src/gpu/d3d11_preview.cpp
+)
+target_include_directories(artminer_gpu_windows PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(artminer_gpu_windows PUBLIC artminer_core artminer_nodes d3d11 dxgi d3dcompiler)
+target_compile_definitions(artminer_gpu_windows PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(artminer_gpu_windows)
+
 add_executable(ArtMiner
     src/app/main.cpp
 )
@@ -82,8 +90,10 @@ target_link_libraries(ArtMiner PRIVATE
     artminer_nodes
     artminer_platform_windows
     artminer_export_windows
+    artminer_gpu_windows
     user32
     gdi32
+    comdlg32
 )
 target_compile_definitions(ArtMiner PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMiner)
@@ -96,6 +106,7 @@ target_link_libraries(ArtMinerTests PRIVATE
     artminer_nodes
     artminer_platform_windows
     artminer_export_windows
+    artminer_gpu_windows
 )
 target_compile_definitions(ArtMinerTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerTests)
