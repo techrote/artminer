@@ -181,6 +181,6 @@ add_test(
     NAME artminer.render.growth-tick
     COMMAND ${CMAKE_COMMAND}
         "-DARTMINER_EXE=$<TARGET_FILE:ArtMiner>"
-        "-DGROWTH_RECIPE=${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-walkers.amr"
-        "-DOUTPUT_PNG=${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-walkers.png"
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_growth_render.cmake")
