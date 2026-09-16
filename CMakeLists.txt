@@ -111,8 +111,20 @@ target_link_libraries(ArtMinerTests PRIVATE
 target_compile_definitions(ArtMinerTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerTests)
 
+add_executable(ArtMinerGpuTests
+    tests/gpu_preview_test.cpp
+)
+target_link_libraries(ArtMinerGpuTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_gpu_windows
+)
+target_compile_definitions(ArtMinerGpuTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+artminer_apply_warnings(ArtMinerGpuTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
+add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
