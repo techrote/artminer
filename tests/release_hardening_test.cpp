@@ -7,6 +7,7 @@
 #include "core/graph.hpp"
 #include "core/local_text.hpp"
 #include "core/recipe.hpp"
+#include "core/specimen_browser.hpp"
 #include "export/export.hpp"
 #include "platform/windows/browser_store.hpp"
 
@@ -41,6 +42,34 @@ output main image value
     }
     auto recipe = std::move(parsed).value();
     expect(artminer::core::validate_recipe(recipe).empty(), "release fixture validates");
+    return recipe;
+}
+
+[[nodiscard]] artminer::core::Recipe make_dependent_parameter_recipe() {
+    constexpr std::string_view text = R"AMR(amr 1
+evaluator 1
+seed 99
+render 32 32 reference
+node source core.scalar.constant 1
+param source value f64 0.5
+node quant core.scalar.quantize 1
+param quant levels i64 8
+param quant minimum f64 0
+param quant maximum f64 1
+node image core.image.from_scalar 1
+param image palette enum grayscale
+edge source value quant source
+edge quant value image source
+output main image value
+)AMR";
+    auto parsed = artminer::core::parse_recipe(text);
+    if (parsed.is_error()) {
+        ++g_failures;
+        std::cerr << "FAIL: dependent-parameter fixture did not parse\n";
+        return {};
+    }
+    auto recipe = std::move(parsed).value();
+    expect(artminer::core::validate_recipe(recipe).empty(), "dependent-parameter fixture validates");
     return recipe;
 }
 
@@ -147,6 +176,26 @@ void test_export_path_hardening() {
     std::filesystem::remove_all(root, ignored);
 }
 
+void test_dependent_parameter_mutation_is_validation_safe() {
+    using namespace artminer::core;
+    const Recipe parent = make_dependent_parameter_recipe();
+    ParameterLocks locks;
+    for (u64 seed = 0U; seed < 128U; ++seed) {
+        auto first = mutate_recipe_parameters(
+            parent, seed, kParameterMutationOperatorVersion, 0.25, locks);
+        auto second = mutate_recipe_parameters(
+            parent, seed, kParameterMutationOperatorVersion, 0.25, locks);
+        expect(first.is_ok() && second.is_ok(), "bounded mutation retry produces a valid dependent-parameter child");
+        if (first.is_error() || second.is_error()) {
+            return;
+        }
+        expect(validate_recipe(first.value()).empty(), "retried mutation child passes normal recipe validation");
+        expect(
+            semantic_fingerprint(first.value()) == semantic_fingerprint(second.value()),
+            "validation-safe mutation retry is deterministic for the same inputs");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -155,6 +204,7 @@ int main() {
     test_bounded_file_read();
     test_session_recovery_round_trip_and_corruption();
     test_export_path_hardening();
+    test_dependent_parameter_mutation_is_validation_safe();
     if (g_failures != 0) {
         std::cerr << g_failures << " release-hardening test(s) failed\n";
         return 1;
