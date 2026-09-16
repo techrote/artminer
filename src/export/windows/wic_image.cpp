@@ -4,7 +4,6 @@
 #include <wincodec.h>
 #include <wrl/client.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <iomanip>
 #include <limits>
@@ -70,14 +69,6 @@ core::Result<void, WicImageError> write_wic_image(
 
     const bool bmp = format == WicImageFormat::bmp;
     if (bmp) {
-        const bool has_transparency = std::any_of(
-            image.rgba.begin() + 3,
-            image.rgba.end(),
-            [index = std::size_t{0U}](const core::u8) mutable {
-                ++index;
-                return false;
-            });
-        (void)has_transparency;
         for (std::size_t index = 3U; index < image.rgba.size(); index += 4U) {
             if (image.rgba[index] != 255U) {
                 return core::Result<void, WicImageError>::failure(WicImageError{
