@@ -11,6 +11,7 @@
 #include <locale>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -64,15 +65,6 @@ struct Checkpoint final {
         return false;
     }
     output = value;
-    return true;
-}
-
-[[nodiscard]] bool parse_u32(const std::string_view text, core::u32& output) noexcept {
-    core::u64 value = 0U;
-    if (!parse_u64(text, value) || value > (std::numeric_limits<core::u32>::max)()) {
-        return false;
-    }
-    output = static_cast<core::u32>(value);
     return true;
 }
 
@@ -174,9 +166,10 @@ struct Checkpoint final {
             QuarryErrorCode::invalid_manifest,
             "Quarry animation sampling requires 1..16 frames and a non-zero tick stride"));
     }
-    const core::u64 last_tick = manifest.animation.first_tick +
+    const core::u64 sample_span =
         static_cast<core::u64>(manifest.animation.frame_count - 1U) * manifest.animation.tick_stride;
-    if (last_tick > nodes::kMaximumAnimationTick) {
+    if (manifest.animation.first_tick > nodes::kMaximumAnimationTick ||
+        sample_span > nodes::kMaximumAnimationTick - manifest.animation.first_tick) {
         return core::Result<void, QuarryError>::failure(make_error(
             QuarryErrorCode::resource_limit,
             "Quarry animation sample range exceeds the canonical animation tick limit"));
@@ -521,6 +514,7 @@ void write_cache_best_effort(
     const JobManifest& manifest) {
     std::error_code exists_error;
     const bool checkpoint_exists = std::filesystem::exists(paths.checkpoint, exists_error) && !exists_error;
+    exists_error.clear();
     const bool results_exists = std::filesystem::exists(paths.results, exists_error) && !exists_error;
     if (!checkpoint_exists) {
         if (results_exists) {
@@ -769,7 +763,8 @@ core::Result<CandidateResult, QuarryError> evaluate_candidate(
     recipe.render.width = manifest.render_width;
     recipe.render.height = manifest.render_height;
     const std::string recipe_fingerprint = core::semantic_fingerprint(recipe);
-    const std::string candidate_identity_payload = manifest.identity + "|" + std::to_string(candidate_index) + "|" + recipe_fingerprint;
+    const std::string candidate_identity_payload =
+        manifest.identity + "|" + std::to_string(candidate_index) + "|" + recipe_fingerprint;
     CandidateResult result;
     result.index = candidate_index;
     result.recipe_fingerprint = recipe_fingerprint;
@@ -849,7 +844,7 @@ core::Result<JobProgress, QuarryError> run_job(
         const core::u32 batch_size = static_cast<core::u32>((std::min<core::u64>)(remaining, worker_count));
         using CandidateEvaluation = core::Result<CandidateResult, QuarryError>;
         std::vector<std::optional<CandidateEvaluation>> evaluations(batch_size);
-        std::vector<bool> cache_hits(batch_size, false);
+        std::vector<core::u8> cache_hits(batch_size, 0U);
         std::vector<std::thread> workers;
         workers.reserve(batch_size);
         for (core::u32 slot = 0U; slot < batch_size; ++slot) {
@@ -857,7 +852,7 @@ core::Result<JobProgress, QuarryError> run_job(
             workers.emplace_back([&, slot, candidate_index]() {
                 bool hit = false;
                 evaluations[slot].emplace(evaluate_candidate(manifest, candidate_index, paths.cache_directory, &hit));
-                cache_hits[slot] = hit;
+                cache_hits[slot] = hit ? 1U : 0U;
             });
         }
         for (std::thread& worker : workers) {
@@ -886,7 +881,7 @@ core::Result<JobProgress, QuarryError> run_job(
             }
             checkpoint.results_hash = update_fnv(checkpoint.results_hash, row);
             ++checkpoint.committed;
-            if (cache_hits[slot]) {
+            if (cache_hits[slot] != 0U) {
                 ++state.cache_hits;
             }
         }
@@ -923,7 +918,8 @@ core::Result<JobProgress, QuarryError> inspect_job(const std::filesystem::path& 
     const JobPaths paths = derive_job_paths(manifest_path);
     std::error_code exists_error;
     if (!std::filesystem::exists(paths.checkpoint, exists_error) || exists_error) {
-        return core::Result<JobProgress, QuarryError>::success(JobProgress{0U, manifest.candidate_count, 0U, false, false});
+        return core::Result<JobProgress, QuarryError>::success(
+            JobProgress{0U, manifest.candidate_count, 0U, false, false});
     }
     auto checkpoint = load_verified_checkpoint(paths, manifest);
     if (checkpoint.is_error()) {
