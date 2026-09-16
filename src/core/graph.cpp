@@ -94,6 +94,25 @@ void add_error(
 std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeRegistry& registry) {
     std::vector<ValidationError> errors;
 
+    std::size_t parameter_count = 0U;
+    bool parameter_limit_exceeded = false;
+    for (const auto& node : recipe.nodes) {
+        if (node.parameters.size() > kMaximumRecipeParameters - (std::min)(parameter_count, kMaximumRecipeParameters)) {
+            parameter_limit_exceeded = true;
+            break;
+        }
+        parameter_count += node.parameters.size();
+    }
+    if (recipe.nodes.size() > kMaximumRecipeNodes || recipe.edges.size() > kMaximumRecipeEdges ||
+        recipe.outputs.size() > kMaximumRecipeOutputs || recipe.metadata.size() > kMaximumRecipeMetadata ||
+        parameter_limit_exceeded || parameter_count > kMaximumRecipeParameters) {
+        add_error(
+            errors,
+            ValidationErrorCode::resource_limit,
+            "recipe exceeds release graph limits (4096 nodes, 65536 parameters, 16384 edges, 1024 outputs, 4096 metadata records)");
+        return errors;
+    }
+
     if (recipe.schema_version != kRecipeSchemaVersion) {
         add_error(
             errors,
@@ -251,10 +270,6 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
                 "input port accepts only one edge: " + edge.to_node + "." + edge.to_port);
         }
 
-        // A state boundary deliberately breaks the same-tick dependency graph.
-        // Its `next` input belongs to tick N-1 when the boundary is observed at
-        // tick N. Every non-boundary edge remains a same-tick dependency, so an
-        // ordinary cycle is still rejected by the topological check below.
         if (to_metadata->state_class != NodeStateClass::state_boundary) {
             adjacency[from_index->second].push_back(to_index->second);
             ++indegree[to_index->second];
