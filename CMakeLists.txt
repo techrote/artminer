@@ -54,6 +54,9 @@ add_library(artminer_core STATIC
     src/core/prng.cpp
     src/core/recipe.cpp
     src/core/specimen_browser.cpp
+    src/core/topology_lineage.cpp
+    src/core/topology_mutation.cpp
+    src/core/topology_specimen.cpp
 )
 target_include_directories(artminer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 artminer_apply_warnings(artminer_core)
@@ -76,6 +79,7 @@ add_library(artminer_quarry STATIC
     src/quarry/quarry.cpp
     src/quarry/seam.cpp
     src/quarry/thumbnail_cache.cpp
+    src/quarry/topology_search.cpp
 )
 target_include_directories(artminer_quarry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(artminer_quarry PUBLIC artminer_core artminer_nodes)
@@ -272,6 +276,18 @@ target_link_libraries(ArtMinerMaterialTests PRIVATE
 target_compile_definitions(ArtMinerMaterialTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerMaterialTests)
 
+add_executable(ArtMinerTopologyTests
+    tests/topology_mutation_test.cpp
+)
+target_link_libraries(ArtMinerTopologyTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_quarry
+    artminer_export_windows
+)
+target_compile_definitions(ArtMinerTopologyTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+artminer_apply_warnings(ArtMinerTopologyTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
@@ -285,6 +301,7 @@ add_test(NAME artminer.quarry-thumbnail COMMAND ArtMinerQuarryThumbnailTests)
 add_test(NAME artminer.quarry-diversity COMMAND ArtMinerQuarryDiversityTests)
 add_test(NAME artminer.glyph-ansi COMMAND ArtMinerGlyphTests)
 add_test(NAME artminer.material-workflows COMMAND ArtMinerMaterialTests)
+add_test(NAME artminer.topology-mutation COMMAND ArtMinerTopologyTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
