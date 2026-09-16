@@ -21,23 +21,26 @@ Every useful result should remain traceable to the recipe and deterministic stat
 
 ## Current state
 
-AM-001 established the native deterministic foundation and AM-002 established the versioned `.amr` recipe/typed-graph substrate. AM-003 adds the first canonical CPU/reference renderer and makes ArtMiner useful headlessly for deterministic static procedural art.
+AM-001 established the native deterministic foundation, AM-002 established the versioned `.amr` recipe/typed-graph substrate, and AM-003 added the canonical CPU/reference renderer and deterministic PNG/provenance export. AM-004 adds the first interactive native D3D11/DXGI preview while keeping the AM-003 CPU evaluator normative.
 
 The AM-003 reference node set covers normalized coordinates, radial/angular fields, deterministic value/gradient/Worley/fBm noise, scalar domain warp, basic SDF composition, threshold/quantisation, repeat/symmetry transforms, palette mapping, channel/luminance extraction, ordered dithering, and final RGBA8 image composition. PNG export uses Windows Imaging Component and writes a deterministic adjacent provenance sidecar containing the complete canonical recipe and semantic fingerprint.
 
-Read [`RAG.md`](RAG.md) for the authoritative architecture, product contract, reviewed implementation plan, and milestone sequence. Read [`AGENTS.md`](AGENTS.md) before autonomous implementation work. The `.amr` grammar and compatibility rules are documented in [`docs/recipe-format.md`](docs/recipe-format.md); canonical raster/evaluator semantics are documented in [`docs/static-evaluator.md`](docs/static-evaluator.md).
+The AM-004 preview accelerates an explicitly supported pointwise subset with generated HLSL. Recipes containing unsupported GPU operations remain interactive by falling back clearly to the unchanged canonical CPU evaluator and uploading that exact result for D3D11 presentation; unsupported nodes are never silently approximated. The native status strip identifies GPU preview versus canonical CPU fallback and reports lightweight local frame/device diagnostics.
+
+Read [`RAG.md`](RAG.md) for the authoritative architecture, product contract, reviewed implementation plan, and milestone sequence. Read [`AGENTS.md`](AGENTS.md) before autonomous implementation work. The `.amr` grammar and compatibility rules are documented in [`docs/recipe-format.md`](docs/recipe-format.md); canonical raster/evaluator semantics are documented in [`docs/static-evaluator.md`](docs/static-evaluator.md); D3D11 capability, fallback, equivalence, resize, and device-loss behaviour are documented in [`docs/gpu-preview.md`](docs/gpu-preview.md).
 
 ## Target stack
 
 - C++20
 - Windows 10/11 x64
 - Win32
-- Direct3D 11 / DXGI (introduced by AM-004)
-- Direct2D / DirectWrite where useful for native UI
+- Direct3D 11 / DXGI
+- Windows SDK D3D shader compiler facilities
+- Direct2D / DirectWrite where useful for later native UI
 - Windows Imaging Component
 - CMake for developer/CI builds
 
-The shipped application must have no third-party runtime installation requirement. The native targets use the Windows SDK and statically link the MSVC C/C++ runtime.
+The shipped application must have no third-party runtime installation requirement. The native targets use Windows platform facilities and statically link the MSVC C/C++ runtime.
 
 ## Developer prerequisites
 
@@ -76,6 +79,7 @@ build\Release\ArtMiner.exe --version
 build\Release\ArtMiner.exe --help
 build\Release\ArtMiner.exe --check-workspace
 build\Release\ArtMiner.exe --workspace D:\ArtMinerWorkspace --check-workspace
+build\Release\ArtMiner.exe --open examples\am003-sdf.amr
 build\Release\ArtMiner.exe recipe validate examples\am002-minimal.amr
 build\Release\ArtMiner.exe recipe inspect examples\am002-minimal.amr
 build\Release\ArtMiner.exe render examples\am003-fbm-warp.amr output\fbm-warp.png
@@ -83,9 +87,11 @@ build\Release\ArtMiner.exe render examples\am003-fbm-warp.amr output\fbm-warp.pn
 
 Recipe and render commands are headless and do not require the GUI or a workspace. `recipe validate` prints the semantic fingerprint; `recipe inspect` also prints schema/evaluator version, seed, render settings, and graph counts. `render` evaluates output `main` through the canonical CPU path, writes the requested PNG, prints an RGBA8 image hash, and writes `<output>.artminer.txt` provenance beside the image.
 
-Additional AM-003 example families are available under `examples/am003-worley.amr`, `examples/am003-sdf.amr`, and `examples/am003-angular-repeat.amr`.
+AM-003 example families are available under `examples/am003-fbm-warp.amr`, `examples/am003-worley.amr`, `examples/am003-sdf.amr`, and `examples/am003-angular-repeat.amr`.
 
-With no command-line action, ArtMiner validates its workspace and opens the minimal native Win32 shell. By default the workspace root is the directory containing `ArtMiner.exe`; an explicit `--workspace` path replaces it. ArtMiner does not silently fall back to the registry or an unrelated profile directory if that location is unwritable.
+With no headless command, ArtMiner validates its workspace and opens the native interactive preview. Use **File → Open Recipe…**, **Ctrl+O**, or `--open <file.amr>` to load a recipe. `am003-sdf.amr` exercises the AM-004 pointwise GPU evaluator; examples containing fBm/warp, Worley noise, or raster repeat use explicit canonical CPU fallback. Resize changes only presentation/layout and does not alter recipe render settings or fingerprints. Device removal/reset causes D3D resources to be reconstructed from the authoritative recipe.
+
+By default the workspace root is the directory containing `ArtMiner.exe`; an explicit `--workspace` path replaces it. ArtMiner does not silently fall back to the registry or an unrelated profile directory if that location is unwritable.
 
 The portable workspace contains/creates:
 
@@ -123,3 +129,5 @@ AM-001 fixed the low-level deterministic contracts and protects them with commit
 - FNV-1a 64-bit as the initial stable non-cryptographic hashing primitive.
 
 AM-003 static noise nodes derive local seeds from the recipe root seed and stable node identity instead of consuming shared RNG state. Canonical evaluation therefore does not depend on graph traversal order, worker scheduling, wall-clock time, locale, or pointer identity.
+
+AM-004 preserves that contract: GPU preview is explicitly non-canonical where floating point can differ, WARP-backed equivalence tests compare supported preview graphs against the CPU oracle within documented tolerances, and canonical fallback returns the CPU reference image rather than changing graph meaning.
