@@ -119,6 +119,13 @@ struct QuarryError final {
     const JobManifest& manifest);
 [[nodiscard]] core::Result<JobManifest, QuarryError> read_job_manifest(const std::filesystem::path& path);
 
+// Reconstructs the authoritative candidate recipe from the manifest and index
+// without rendering it. This is shared by evaluation and later diversity/search
+// stages so candidate identity cannot drift between subsystems.
+[[nodiscard]] core::Result<core::Recipe, QuarryError> reconstruct_candidate_recipe(
+    const JobManifest& manifest,
+    core::u64 candidate_index);
+
 [[nodiscard]] core::Result<CandidateResult, QuarryError> evaluate_candidate(
     const JobManifest& manifest,
     core::u64 candidate_index,
