@@ -613,7 +613,7 @@ core::Result<std::string, ExportError> serialize_palette(
         }
     } else {
         stream << "# ArtMiner palette 1\n# recipe " << core::semantic_fingerprint(recipe) << '\n'
-               << "# node " << palette_node_id << '\n# columns: index r g b a\n";
+               << "# node " << palette_node_id << "\n# columns: index r g b a\n";
         for (std::size_t index = 0U; index < colours.size(); ++index) {
             const auto& colour = colours[index];
             stream << index << ' ' << colour.r << ' ' << colour.g << ' ' << colour.b << ' ' << colour.a << '\n';
