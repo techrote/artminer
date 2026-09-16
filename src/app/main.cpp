@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "app/browser_window.hpp"
+#include "app/export_command.hpp"
 #include "app/lineage_window.hpp"
 #include "app/playback_window.hpp"
 #include "core/graph.hpp"
@@ -43,6 +44,8 @@ void print_help() {
         << "       ArtMiner render <file.amr> <output.png>\n"
         << "       ArtMiner render-tick <file.amr> <tick> <output.png>\n"
         << "       ArtMiner render-range <file.amr> <start> <end> <output-dir>\n"
+        << "       ArtMiner export ui <file.amr>\n"
+        << "       ArtMiner export <still|frame|sequence|sheet|palette> ...\n"
         << "       ArtMiner animate <file.amr>\n"
         << "       ArtMiner lineage [parent-a.amr] [parent-b.amr]\n\n"
         << "Options:\n"
@@ -51,12 +54,12 @@ void print_help() {
         << "  --workspace <path>     Use an explicit portable workspace root.\n"
         << "  --check-workspace      Validate/create the workspace layout and exit.\n"
         << "  --open <file.amr>      Open a recipe in the specimen browser.\n\n"
-        << "Static render uses the AM-003 canonical CPU path. render-tick and render-range\n"
-        << "use the AM-007 canonical fixed-tick motion/feedback path. PNG renders are\n"
-        << "accompanied by deterministic provenance sidecars. animate opens the native\n"
-        << "pause/play, single-step, reset and preview-speed inspector; speed changes\n"
-        << "wall-clock playback only and never changes the requested simulation tick.\n"
-        << "lineage opens the AM-008 ordered two-parent breeder and portable ancestry browser.\n\n"
+        << "AM-009 export provides transactional PNG/BMP/raw RGBA, deterministic frame\n"
+        << "sequences, sprite sheets/atlases, palette text/CSV and conservative .cube LUTs.\n"
+        << "Use 'ArtMiner export' without further arguments for the complete syntax.\n"
+        << "Static render uses the canonical CPU path. render-tick and render-range use\n"
+        << "the canonical fixed-tick motion/feedback path. Legacy PNG renders retain\n"
+        << "their deterministic provenance sidecars.\n\n"
         << "Without a command ArtMiner opens the native 4x4 specimen browser.\n"
         << "Mutation and seed-only variation are deterministic from explicit seeds.\n"
         << "Main shortcuts: M mutate, N seed variants, F favourite, arrow keys select,\n"
@@ -370,6 +373,9 @@ int wmain(const int argc, wchar_t* argv[]) {
     }
     if (argc >= 2 && std::wstring_view(argv[1]) == L"render-range") {
         return run_render_range_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"export") {
+        return artminer::app::run_export_command(argc, argv);
     }
     if (argc >= 2 && std::wstring_view(argv[1]) == L"animate") {
         return run_animate_command(argc, argv);
