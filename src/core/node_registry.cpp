@@ -19,7 +19,8 @@ namespace {
     const double default_value,
     const double minimum,
     const double maximum,
-    std::string group = {}) {
+    std::string group = {},
+    const MutationScale scale = MutationScale::linear) {
     ParameterDomain domain;
     domain.real_min = minimum;
     domain.real_max = maximum;
@@ -28,7 +29,25 @@ namespace {
         ParameterKind::real,
         default_value,
         std::move(domain),
-        MutationMetadata{true, MutationScale::linear, std::move(group)},
+        MutationMetadata{true, scale, std::move(group)},
+    };
+}
+
+[[nodiscard]] ParameterSpec integer_parameter(
+    std::string name,
+    const i64 default_value,
+    const i64 minimum,
+    const i64 maximum,
+    std::string group = {}) {
+    ParameterDomain domain;
+    domain.integer_min = minimum;
+    domain.integer_max = maximum;
+    return ParameterSpec{
+        std::move(name),
+        ParameterKind::integer,
+        default_value,
+        std::move(domain),
+        MutationMetadata{true, MutationScale::discrete, std::move(group)},
     };
 }
 
@@ -48,9 +67,21 @@ namespace {
     };
 }
 
+[[nodiscard]] std::vector<ParameterSpec> gradient_parameters() {
+    return {
+        real_parameter("r0", 0.02, 0.0, 1.0, "colour0"),
+        real_parameter("g0", 0.04, 0.0, 1.0, "colour0"),
+        real_parameter("b0", 0.12, 0.0, 1.0, "colour0"),
+        real_parameter("a0", 1.0, 0.0, 1.0, "colour0"),
+        real_parameter("r1", 0.95, 0.0, 1.0, "colour1"),
+        real_parameter("g1", 0.55, 0.0, 1.0, "colour1"),
+        real_parameter("b1", 0.08, 0.0, 1.0, "colour1"),
+        real_parameter("a1", 1.0, 0.0, 1.0, "colour1"),
+    };
+}
+
 [[nodiscard]] std::vector<NodeMetadata> make_builtin_nodes() {
-    // AM-002 defines semantics/metadata only. Evaluator capability flags remain false
-    // until AM-003 (CPU) and AM-004 (GPU) actually implement those evaluators.
+    constexpr EvaluatorCapabilities cpu_reference{true, false};
     constexpr EvaluatorCapabilities unavailable{false, false};
     std::vector<NodeMetadata> nodes;
 
@@ -61,7 +92,7 @@ namespace {
         {output("value", DataKind::scalar_field)},
         {real_parameter("value", 0.0, -1000000.0, 1000000.0, "value")},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
     });
 
     nodes.push_back(NodeMetadata{
@@ -71,7 +102,230 @@ namespace {
         {output("value", DataKind::scalar_field)},
         {},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.coord_x",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {},
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.coord_y",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {},
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.radial",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("center_x", 0.5, -2.0, 3.0, "position"),
+            real_parameter("center_y", 0.5, -2.0, 3.0, "position"),
+            real_parameter("scale", 1.0, 0.001, 100.0, "scale", MutationScale::logarithmic),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.angular",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("center_x", 0.5, -2.0, 3.0, "position"),
+            real_parameter("center_y", 0.5, -2.0, 3.0, "position"),
+            real_parameter("turns", 1.0, -64.0, 64.0, "angle"),
+            real_parameter("phase", 0.0, -64.0, 64.0, "angle", MutationScale::periodic),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.noise.value",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("frequency", 8.0, 0.01, 512.0, "noise", MutationScale::logarithmic),
+            real_parameter("offset_x", 0.0, -1000000.0, 1000000.0, "offset"),
+            real_parameter("offset_y", 0.0, -1000000.0, 1000000.0, "offset"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.noise.gradient",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("frequency", 8.0, 0.01, 512.0, "noise", MutationScale::logarithmic),
+            real_parameter("offset_x", 0.0, -1000000.0, 1000000.0, "offset"),
+            real_parameter("offset_y", 0.0, -1000000.0, 1000000.0, "offset"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.noise.worley",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("frequency", 10.0, 0.01, 256.0, "noise", MutationScale::logarithmic),
+            real_parameter("distance_scale", 1.25, 0.01, 8.0, "noise", MutationScale::logarithmic),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.noise.fbm",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            enum_parameter("basis", "gradient", {"value", "gradient"}, "noise"),
+            real_parameter("frequency", 4.0, 0.01, 256.0, "noise", MutationScale::logarithmic),
+            integer_parameter("octaves", 5, 1, 10, "noise"),
+            real_parameter("lacunarity", 2.0, 1.0, 8.0, "noise", MutationScale::logarithmic),
+            real_parameter("gain", 0.5, 0.0, 1.0, "noise"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.warp",
+        1U,
+        {
+            input("source", DataKind::scalar_field),
+            input("x_offset", DataKind::scalar_field),
+            input("y_offset", DataKind::scalar_field),
+        },
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("strength", 0.1, -2.0, 2.0, "warp"),
+            enum_parameter("wrap", "repeat", {"clamp", "repeat"}, "warp"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.sdf.circle",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("center_x", 0.5, -2.0, 3.0, "position"),
+            real_parameter("center_y", 0.5, -2.0, 3.0, "position"),
+            real_parameter("radius", 0.25, 0.001, 2.0, "shape", MutationScale::logarithmic),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.sdf.box",
+        1U,
+        {},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("center_x", 0.5, -2.0, 3.0, "position"),
+            real_parameter("center_y", 0.5, -2.0, 3.0, "position"),
+            real_parameter("half_width", 0.25, 0.001, 2.0, "shape", MutationScale::logarithmic),
+            real_parameter("half_height", 0.25, 0.001, 2.0, "shape", MutationScale::logarithmic),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.minimum",
+        1U,
+        {input("a", DataKind::scalar_field), input("b", DataKind::scalar_field)},
+        {output("value", DataKind::scalar_field)},
+        {},
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.maximum",
+        1U,
+        {input("a", DataKind::scalar_field), input("b", DataKind::scalar_field)},
+        {output("value", DataKind::scalar_field)},
+        {},
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.threshold",
+        1U,
+        {input("source", DataKind::scalar_field)},
+        {output("value", DataKind::scalar_field)},
+        {
+            real_parameter("threshold", 0.5, -1000000.0, 1000000.0, "threshold"),
+            real_parameter("low", 0.0, -1000000.0, 1000000.0, "range"),
+            real_parameter("high", 1.0, -1000000.0, 1000000.0, "range"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.quantize",
+        1U,
+        {input("source", DataKind::scalar_field)},
+        {output("value", DataKind::scalar_field)},
+        {
+            integer_parameter("levels", 8, 2, 256, "quantize"),
+            real_parameter("minimum", 0.0, -1000000.0, 1000000.0, "range"),
+            real_parameter("maximum", 1.0, -1000000.0, 1000000.0, "range"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.transform.repeat",
+        1U,
+        {input("source", DataKind::scalar_field)},
+        {output("value", DataKind::scalar_field)},
+        {
+            integer_parameter("x_count", 2, 1, 32, "repeat"),
+            integer_parameter("y_count", 2, 1, 32, "repeat"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.transform.symmetry",
+        1U,
+        {input("source", DataKind::scalar_field)},
+        {output("value", DataKind::scalar_field)},
+        {enum_parameter("mode", "xy", {"x", "y", "xy"}, "symmetry")},
+        NodeStateClass::stateless,
+        cpu_reference,
     });
 
     nodes.push_back(NodeMetadata{
@@ -81,7 +335,7 @@ namespace {
         {output("value", DataKind::vector_field)},
         {},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
     });
 
     nodes.push_back(NodeMetadata{
@@ -96,7 +350,17 @@ namespace {
         {output("value", DataKind::colour_field)},
         {},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.scalar.from_colour",
+        1U,
+        {input("source", DataKind::colour_field)},
+        {output("value", DataKind::scalar_field)},
+        {enum_parameter("channel", "luminance", {"r", "g", "b", "a", "luminance"}, "channel")},
+        NodeStateClass::stateless,
+        cpu_reference,
     });
 
     nodes.push_back(NodeMetadata{
@@ -106,9 +370,10 @@ namespace {
         {output("value", DataKind::mask)},
         {},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
     });
 
+    // Particle semantics remain deliberately deferred to the fixed-tick milestones.
     nodes.push_back(NodeMetadata{
         "core.particles.empty",
         1U,
@@ -126,7 +391,27 @@ namespace {
         {output("value", DataKind::palette)},
         {enum_parameter("preset", "mono", {"mono", "warm", "cool"}, "palette")},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.palette.gradient2",
+        1U,
+        {},
+        {output("value", DataKind::palette)},
+        gradient_parameters(),
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.colour.from_palette",
+        1U,
+        {input("source", DataKind::scalar_field), input("palette", DataKind::palette)},
+        {output("value", DataKind::colour_field)},
+        {enum_parameter("mode", "linear", {"linear", "nearest"}, "palette")},
+        NodeStateClass::stateless,
+        cpu_reference,
     });
 
     nodes.push_back(NodeMetadata{
@@ -136,7 +421,7 @@ namespace {
         {output("value", DataKind::image)},
         {},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
     });
 
     nodes.push_back(NodeMetadata{
@@ -146,10 +431,23 @@ namespace {
         {output("value", DataKind::image)},
         {enum_parameter("palette", "grayscale", {"grayscale", "heat"}, "palette")},
         NodeStateClass::stateless,
-        unavailable,
+        cpu_reference,
     });
 
-    // Reserved deterministic state-boundary metadata. AM-002 still rejects all graph cycles;
+    nodes.push_back(NodeMetadata{
+        "core.image.ordered_dither",
+        1U,
+        {input("source", DataKind::colour_field)},
+        {output("value", DataKind::image)},
+        {
+            integer_parameter("levels", 2, 2, 16, "dither"),
+            enum_parameter("matrix", "bayer4", {"bayer4", "bayer8"}, "dither"),
+        },
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    // Reserved deterministic state-boundary metadata. AM-003 still rejects all graph cycles;
     // AM-007 may later define legal feedback semantics through this class explicitly.
     nodes.push_back(NodeMetadata{
         "core.state.delay.scalar",

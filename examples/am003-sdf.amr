@@ -1,0 +1,32 @@
+# Union of a circle and box SDF, converted to an inside/outside mask and warm palette.
+amr 1
+evaluator 1
+seed 314159265
+render 256 256 "reference"
+node "circle" "core.sdf.circle" 1
+param "circle" "center_x" f64 0.38
+param "circle" "center_y" f64 0.48
+param "circle" "radius" f64 0.24
+node "box" "core.sdf.box" 1
+param "box" "center_x" f64 0.64
+param "box" "center_y" f64 0.54
+param "box" "half_width" f64 0.18
+param "box" "half_height" f64 0.13
+node "union" "core.scalar.minimum" 1
+node "inside" "core.scalar.threshold" 1
+param "inside" "threshold" f64 0
+param "inside" "low" f64 0
+param "inside" "high" f64 1
+node "palette" "core.palette.default" 1
+param "palette" "preset" enum "warm"
+node "colour" "core.colour.from_palette" 1
+param "colour" "mode" enum "nearest"
+node "image" "core.image.from_colour" 1
+edge "circle" "value" "union" "a"
+edge "box" "value" "union" "b"
+edge "union" "value" "inside" "source"
+edge "inside" "value" "colour" "source"
+edge "palette" "value" "colour" "palette"
+edge "colour" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "sdf"

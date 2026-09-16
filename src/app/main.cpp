@@ -12,6 +12,8 @@
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
 #include "core/version.hpp"
+#include "export/windows/wic_png.hpp"
+#include "nodes/static_evaluator.hpp"
 #include "platform/windows/portable_workspace.hpp"
 
 namespace {
@@ -34,13 +36,16 @@ void print_help() {
     std::cout
         << "Usage: ArtMiner [options]\n"
         << "       ArtMiner recipe validate <file.amr>\n"
-        << "       ArtMiner recipe inspect <file.amr>\n\n"
+        << "       ArtMiner recipe inspect <file.amr>\n"
+        << "       ArtMiner render <file.amr> <output.png>\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
         << "  --version              Show product/version information.\n"
         << "  --workspace <path>     Use an explicit portable workspace root.\n"
         << "  --check-workspace      Validate/create the workspace layout and exit.\n\n"
-        << "Recipe commands validate typed graph semantics without opening the GUI.\n"
+        << "Headless recipe/render commands use the canonical CPU reference path and\n"
+        << "do not open the GUI. PNG renders are accompanied by deterministic\n"
+        << "<output>.artminer.txt provenance containing the complete recipe.\n\n"
         << "Without options ArtMiner validates its portable workspace and opens the\n"
         << "minimal native application shell.\n";
 }
@@ -104,6 +109,29 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
     std::cerr << ": " << error.message << '\n';
 }
 
+[[nodiscard]] std::optional<artminer::core::Recipe> load_validated_recipe(const std::filesystem::path& path) {
+    const auto text = read_text_file(path);
+    if (!text.has_value()) {
+        return std::nullopt;
+    }
+
+    auto parsed = artminer::core::parse_recipe(*text);
+    if (parsed.is_error()) {
+        print_recipe_parse_error(parsed.error());
+        return std::nullopt;
+    }
+
+    artminer::core::Recipe recipe = std::move(parsed).value();
+    const auto validation_errors = artminer::core::validate_recipe(recipe);
+    if (!validation_errors.empty()) {
+        for (const auto& error : validation_errors) {
+            std::cerr << "recipe validation error: " << error.message << '\n';
+        }
+        return std::nullopt;
+    }
+    return recipe;
+}
+
 [[nodiscard]] int run_recipe_command(const int argc, wchar_t* argv[]) {
     if (argc != 4) {
         std::cerr << "usage: ArtMiner recipe <validate|inspect> <file.amr>\n";
@@ -116,43 +144,65 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
         return 2;
     }
 
-    const std::filesystem::path path(argv[3]);
-    const auto text = read_text_file(path);
-    if (!text.has_value()) {
-        return 5;
-    }
-
-    auto parsed = artminer::core::parse_recipe(*text);
-    if (parsed.is_error()) {
-        print_recipe_parse_error(parsed.error());
-        return 5;
-    }
-
-    artminer::core::Recipe recipe = std::move(parsed).value();
-    const auto validation_errors = artminer::core::validate_recipe(recipe);
-    if (!validation_errors.empty()) {
-        for (const auto& error : validation_errors) {
-            std::cerr << "recipe validation error: " << error.message << '\n';
-        }
+    auto recipe = load_validated_recipe(std::filesystem::path(argv[3]));
+    if (!recipe.has_value()) {
         return 6;
     }
 
-    const std::string fingerprint = artminer::core::semantic_fingerprint(recipe);
+    const std::string fingerprint = artminer::core::semantic_fingerprint(*recipe);
     if (action == L"validate") {
         std::cout << "valid " << fingerprint << '\n';
         return 0;
     }
 
     std::cout << "ArtMiner recipe\n"
-              << "schema: " << recipe.schema_version << '\n'
-              << "evaluator: " << recipe.evaluator_version << '\n'
-              << "seed: " << recipe.root_seed << '\n'
-              << "render: " << recipe.render.width << 'x' << recipe.render.height << ' ' << recipe.render.quality << '\n'
-              << "nodes: " << recipe.nodes.size() << '\n'
-              << "edges: " << recipe.edges.size() << '\n'
-              << "outputs: " << recipe.outputs.size() << '\n'
-              << "metadata: " << recipe.metadata.size() << '\n'
+              << "schema: " << recipe->schema_version << '\n'
+              << "evaluator: " << recipe->evaluator_version << '\n'
+              << "seed: " << recipe->root_seed << '\n'
+              << "render: " << recipe->render.width << 'x' << recipe->render.height << ' ' << recipe->render.quality << '\n'
+              << "nodes: " << recipe->nodes.size() << '\n'
+              << "edges: " << recipe->edges.size() << '\n'
+              << "outputs: " << recipe->outputs.size() << '\n'
+              << "metadata: " << recipe->metadata.size() << '\n'
               << "fingerprint: " << fingerprint << '\n';
+    return 0;
+}
+
+[[nodiscard]] int run_render_command(const int argc, wchar_t* argv[]) {
+    if (argc != 4) {
+        std::cerr << "usage: ArtMiner render <file.amr> <output.png>\n";
+        return 2;
+    }
+
+    const std::filesystem::path recipe_path(argv[2]);
+    const std::filesystem::path output_path(argv[3]);
+    auto recipe = load_validated_recipe(recipe_path);
+    if (!recipe.has_value()) {
+        return 6;
+    }
+
+    auto rendered = artminer::nodes::render_reference(*recipe);
+    if (rendered.is_error()) {
+        std::cerr << "render error: " << rendered.error().message << '\n';
+        return 7;
+    }
+
+    artminer::nodes::Image image = std::move(rendered).value();
+    auto written = artminer::exporting::windows::write_png_with_provenance(output_path, image, *recipe);
+    if (written.is_error()) {
+        std::cerr << "export error: " << written.error().message << '\n';
+        return 8;
+    }
+
+    const auto sidecar = artminer::exporting::windows::provenance_sidecar_path(output_path);
+    const std::string image_hash = artminer::nodes::image_fingerprint(image);
+    const std::string recipe_hash = artminer::core::semantic_fingerprint(*recipe);
+    const std::wstring image_hash_wide(image_hash.begin(), image_hash.end());
+    const std::wstring recipe_hash_wide(recipe_hash.begin(), recipe_hash.end());
+    std::wcout << L"rendered " << output_path.wstring() << L" " << image.width << L"x" << image.height
+               << L" image-hash " << image_hash_wide
+               << L" recipe " << recipe_hash_wide
+               << L" provenance " << sidecar.wstring() << L'\n';
     return 0;
 }
 
@@ -172,11 +222,11 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
         GetClientRect(window, &client);
         FillRect(device_context, &client, GetSysColorBrush(COLOR_WINDOW));
 
-        std::wstring text = L"ArtMiner 0.1.0-dev\r\n\r\nAM-002 recipe/graph foundation is available.\r\n\r\nPortable workspace:\r\n";
+        std::wstring text = L"ArtMiner 0.1.0-dev\r\n\r\nAM-003 canonical static renderer is available headlessly.\r\n\r\nPortable workspace:\r\n";
         if (state != nullptr) {
             text += state->workspace_root;
         }
-        text += L"\r\n\r\nUse 'ArtMiner recipe inspect <file.amr>' for headless recipe inspection.\r\n\r\nClose this window to exit.";
+        text += L"\r\n\r\nTry: ArtMiner render <recipe.amr> <output.png>\r\n\r\nInteractive D3D11 preview arrives in AM-004.\r\n\r\nClose this window to exit.";
 
         client.left += 24;
         client.top += 24;
@@ -221,7 +271,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
     HWND window = CreateWindowExW(
         0,
         kWindowClass,
-        L"ArtMiner — AM-002 Recipe Foundation",
+        L"ArtMiner — AM-003 Static Reference Renderer",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
@@ -262,6 +312,9 @@ int wmain(const int argc, wchar_t* argv[]) {
 
     if (argc >= 2 && std::wstring_view(argv[1]) == L"recipe") {
         return run_recipe_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"render") {
+        return run_render_command(argc, argv);
     }
 
     CommandLine command_line;

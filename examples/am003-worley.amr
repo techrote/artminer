@@ -1,0 +1,18 @@
+# Cellular distance field rendered through the built-in cool palette.
+amr 1
+evaluator 1
+seed 1311768467463790320
+render 256 256 "reference"
+node "cells" "core.noise.worley" 1
+param "cells" "frequency" f64 13
+param "cells" "distance_scale" f64 1.65
+node "palette" "core.palette.default" 1
+param "palette" "preset" enum "cool"
+node "colour" "core.colour.from_palette" 1
+param "colour" "mode" enum "linear"
+node "image" "core.image.from_colour" 1
+edge "cells" "value" "colour" "source"
+edge "palette" "value" "colour" "palette"
+edge "colour" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "worley"
