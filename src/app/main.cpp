@@ -15,6 +15,7 @@
 #include "app/export_command.hpp"
 #include "app/lineage_window.hpp"
 #include "app/playback_window.hpp"
+#include "app/quarry_command.hpp"
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
 #include "core/version.hpp"
@@ -47,7 +48,8 @@ void print_help() {
         << "       ArtMiner export ui <file.amr>\n"
         << "       ArtMiner export <still|frame|sequence|sheet|palette> ...\n"
         << "       ArtMiner animate <file.amr>\n"
-        << "       ArtMiner lineage [parent-a.amr] [parent-b.amr]\n\n"
+        << "       ArtMiner lineage [parent-a.amr] [parent-b.amr]\n"
+        << "       ArtMiner quarry <create|run|resume|inspect|ui> ...\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
         << "  --version              Show product/version information.\n"
@@ -57,6 +59,9 @@ void print_help() {
         << "AM-009 export provides transactional PNG/BMP/raw RGBA, deterministic frame\n"
         << "sequences, sprite sheets/atlases, palette text/CSV and conservative .cube LUTs.\n"
         << "Use 'ArtMiner export' without further arguments for the complete syntax.\n"
+        << "AM-010 Quarry provides deterministic bounded candidate jobs, transparent metrics,\n"
+        << "disposable caching, cancellation/checkpoint resume, and raw metric browsing.\n"
+        << "Use 'ArtMiner quarry' without further arguments for the complete syntax.\n"
         << "Static render uses the canonical CPU path. render-tick and render-range use\n"
         << "the canonical fixed-tick motion/feedback path. Legacy PNG renders retain\n"
         << "their deterministic provenance sidecars.\n\n"
@@ -382,6 +387,9 @@ int wmain(const int argc, wchar_t* argv[]) {
     }
     if (argc >= 2 && std::wstring_view(argv[1]) == L"lineage") {
         return run_lineage_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"quarry") {
+        return artminer::app::run_quarry_command(argc, argv);
     }
 
     CommandLine command_line;
