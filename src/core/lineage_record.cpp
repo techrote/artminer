@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <sstream>
@@ -58,7 +59,19 @@ namespace {
     return output.str();
 }
 
-[[nodiscard]] bool simple_token(const std::string_view value) {
+[[nodiscard]] bool fingerprint_token(const std::string_view value) noexcept {
+    if (value.size() != 32U) {
+        return false;
+    }
+    for (const char ch : value) {
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool lock_token(const std::string_view value) {
     if (value.empty()) {
         return false;
     }
@@ -211,9 +224,9 @@ Result<LineageRecord, LineageError> parse_lineage_record(const std::string_view 
         return Result<LineageRecord, LineageError>::failure(
             make_error(LineageErrorCode::malformed_lineage, "lineage record is missing a required field"));
     }
-    if (!simple_token(child->second) || !simple_token(parent_a->second)) {
+    if (!fingerprint_token(child->second) || !fingerprint_token(parent_a->second)) {
         return Result<LineageRecord, LineageError>::failure(
-            make_error(LineageErrorCode::malformed_lineage, "lineage fingerprint token is malformed"));
+            make_error(LineageErrorCode::malformed_lineage, "lineage fingerprint must be 32 lowercase hexadecimal digits"));
     }
 
     u32 operator_version = 0U;
@@ -229,16 +242,16 @@ Result<LineageRecord, LineageError> parse_lineage_record(const std::string_view 
     record.operator_version = operator_version;
     record.operation_seed = operation_seed;
     record.locks = locks_field->second == "-" ? std::string{} : locks_field->second;
-    if (!record.locks.empty() && !simple_token(record.locks)) {
+    if (!record.locks.empty() && !lock_token(record.locks)) {
         return Result<LineageRecord, LineageError>::failure(
             make_error(LineageErrorCode::malformed_lineage, "lineage lock token is malformed"));
     }
 
     if (kind->second == "crossover") {
         const auto parent_b = fields.find("parent_b");
-        if (parent_b == fields.end() || !simple_token(parent_b->second) || fields.contains("strength")) {
+        if (parent_b == fields.end() || !fingerprint_token(parent_b->second) || fields.contains("strength")) {
             return Result<LineageRecord, LineageError>::failure(
-                make_error(LineageErrorCode::malformed_lineage, "crossover lineage requires parent_b and no strength"));
+                make_error(LineageErrorCode::malformed_lineage, "crossover lineage requires a valid parent_b fingerprint and no strength"));
         }
         record.kind = LineageOperationKind::crossover;
         record.parent_b_fingerprint = parent_b->second;
