@@ -94,7 +94,7 @@ namespace {
     std::string result;
     result.reserve(text.size());
     for (const wchar_t value : text) {
-        if (value < 0 || value > 0x7f) {
+        if (static_cast<unsigned int>(value) > 0x7fU) {
             return std::nullopt;
         }
         result.push_back(static_cast<char>(value));
