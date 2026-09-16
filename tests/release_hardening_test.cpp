@@ -54,6 +54,23 @@ void test_utf8_and_text_limits() {
     expect(validate_local_text("amr 1\n").is_ok(), "bounded local text accepts a normal recipe prefix");
     expect(validate_local_text(std::string(32U, 'x'), 64U, 16U).is_error(), "overlong source line is rejected");
     expect(validate_local_text(std::string(65U, 'x'), 64U, 64U).is_error(), "oversized source text is rejected");
+
+    const auto invalid_utf8 = artminer::core::parse_recipe(std::string_view("\xc0\xaf", 2U));
+    expect(invalid_utf8.is_error(), "recipe parser rejects invalid UTF-8 directly");
+    const auto oversized = artminer::core::parse_recipe(
+        std::string(artminer::core::kMaximumRecipeFileBytes + 1U, 'x'));
+    expect(
+        oversized.is_error() && oversized.error().code == artminer::core::RecipeErrorCode::resource_limit,
+        "recipe parser reports an explicit resource limit for oversized source");
+}
+
+void test_graph_resource_limits() {
+    auto recipe = make_recipe();
+    recipe.nodes.resize(artminer::core::kMaximumRecipeNodes + 1U);
+    const auto errors = artminer::core::validate_recipe(recipe);
+    expect(
+        !errors.empty() && errors.front().code == artminer::core::ValidationErrorCode::resource_limit,
+        "programmatic oversized graph is rejected before graph-work allocations");
 }
 
 void test_bounded_file_read() {
@@ -134,6 +151,7 @@ void test_export_path_hardening() {
 
 int main() {
     test_utf8_and_text_limits();
+    test_graph_resource_limits();
     test_bounded_file_read();
     test_session_recovery_round_trip_and_corruption();
     test_export_path_hardening();
