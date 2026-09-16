@@ -1,0 +1,21 @@
+# Seam-safe composition: xy symmetry maps both opposite output edges to the
+# same source coordinates, so the discrete tile seam metric is exactly zero.
+amr 1
+evaluator 1
+seed 13013
+render 128 128 "reference"
+node "noise" "core.noise.fbm" 1
+param "noise" "basis" enum "gradient"
+param "noise" "frequency" f64 5
+param "noise" "octaves" i64 4
+param "noise" "lacunarity" f64 2
+param "noise" "gain" f64 0.5
+node "seam" "core.scalar.transform.symmetry" 1
+param "seam" "mode" enum "xy"
+node "image" "core.image.from_scalar" 1
+param "image" "palette" enum "heat"
+edge "noise" "value" "seam" "source"
+edge "seam" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "am013-seamless"
+meta "material.periodicity" "xy-symmetry-edge-identity"

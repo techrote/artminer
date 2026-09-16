@@ -1,0 +1,36 @@
+# Four explicit semantic masks packed into RGBA; every channel mapping is a graph edge.
+amr 1
+evaluator 1
+seed 13015
+render 64 64 "reference"
+node "x" "core.scalar.coord_x" 1
+node "source" "core.image.from_scalar" 1
+param "source" "palette" enum "grayscale"
+node "rmask" "core.material.mask_from_image" 1
+param "rmask" "channel" enum "r"
+param "rmask" "threshold" f64 0.2
+param "rmask" "invert" enum "no"
+node "gmask" "core.material.mask_from_image" 1
+param "gmask" "channel" enum "g"
+param "gmask" "threshold" f64 0.4
+param "gmask" "invert" enum "no"
+node "bmask" "core.material.mask_from_image" 1
+param "bmask" "channel" enum "b"
+param "bmask" "threshold" f64 0.6
+param "bmask" "invert" enum "no"
+node "amask" "core.material.mask_from_image" 1
+param "amask" "channel" enum "luminance"
+param "amask" "threshold" f64 0.8
+param "amask" "invert" enum "yes"
+node "packed" "core.material.pack_masks_rgba" 1
+edge "x" "value" "source" "source"
+edge "source" "value" "rmask" "source"
+edge "source" "value" "gmask" "source"
+edge "source" "value" "bmask" "source"
+edge "source" "value" "amask" "source"
+edge "rmask" "mask" "packed" "r"
+edge "gmask" "mask" "packed" "g"
+edge "bmask" "mask" "packed" "b"
+edge "amask" "mask" "packed" "a"
+output "main" "packed" "value"
+meta "example.family" "am013-packed-masks"

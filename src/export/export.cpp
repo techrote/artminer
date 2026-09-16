@@ -22,6 +22,7 @@
 #include "core/graph.hpp"
 #include "core/hash.hpp"
 #include "export/windows/wic_image.hpp"
+#include "nodes/material_evaluator.hpp"
 #include "nodes/motion_evaluator.hpp"
 
 namespace artminer::exporting {
@@ -40,6 +41,11 @@ struct TickSelection final {
     std::optional<core::u64> last;
 };
 
+struct WorkflowProvenance final {
+    nodes::MaterialOutputDescription output;
+    std::optional<nodes::LoopValidation> loop;
+};
+
 [[nodiscard]] ExportError make_error(std::string message) {
     return ExportError{std::move(message)};
 }
@@ -48,8 +54,7 @@ struct TickSelection final {
     const core::Recipe& recipe,
     const std::string_view node_id) noexcept {
     const auto found = std::find_if(
-        recipe.nodes.begin(),
-        recipe.nodes.end(),
+        recipe.nodes.begin(), recipe.nodes.end(),
         [node_id](const core::NodeInstance& node) { return node.id == node_id; });
     return found == recipe.nodes.end() ? nullptr : &*found;
 }
@@ -58,8 +63,7 @@ struct TickSelection final {
     const core::NodeInstance& node,
     const std::string_view name) noexcept {
     const auto found = std::find_if(
-        node.parameters.begin(),
-        node.parameters.end(),
+        node.parameters.begin(), node.parameters.end(),
         [name](const core::ParameterAssignment& parameter) { return parameter.name == name; });
     return found == node.parameters.end() ? nullptr : &*found;
 }
@@ -86,25 +90,17 @@ struct TickSelection final {
         const std::string& preset = std::get<std::string>(preset_parameter->value);
         if (preset == "mono") {
             return core::Result<std::vector<PaletteColour>, ExportError>::success({
-                {0.0, 0.0, 0.0, 1.0},
-                {1.0, 1.0, 1.0, 1.0},
-            });
+                {0.0, 0.0, 0.0, 1.0}, {1.0, 1.0, 1.0, 1.0}});
         }
         if (preset == "warm") {
             return core::Result<std::vector<PaletteColour>, ExportError>::success({
-                {0.055, 0.016, 0.10, 1.0},
-                {0.45, 0.06, 0.08, 1.0},
-                {0.90, 0.32, 0.08, 1.0},
-                {1.0, 0.82, 0.28, 1.0},
-            });
+                {0.055, 0.016, 0.10, 1.0}, {0.45, 0.06, 0.08, 1.0},
+                {0.90, 0.32, 0.08, 1.0}, {1.0, 0.82, 0.28, 1.0}});
         }
         if (preset == "cool") {
             return core::Result<std::vector<PaletteColour>, ExportError>::success({
-                {0.01, 0.04, 0.12, 1.0},
-                {0.02, 0.22, 0.42, 1.0},
-                {0.08, 0.62, 0.72, 1.0},
-                {0.72, 0.95, 0.98, 1.0},
-            });
+                {0.01, 0.04, 0.12, 1.0}, {0.02, 0.22, 0.42, 1.0},
+                {0.08, 0.62, 0.72, 1.0}, {0.72, 0.95, 0.98, 1.0}});
         }
         return core::Result<std::vector<PaletteColour>, ExportError>::failure(make_error(
             "unsupported palette preset '" + preset + "'"));
@@ -130,9 +126,7 @@ struct TickSelection final {
                 "gradient palette parameters are missing or malformed"));
         }
         return core::Result<std::vector<PaletteColour>, ExportError>::success({
-            {*r0, *g0, *b0, *a0},
-            {*r1, *g1, *b1, *a1},
-        });
+            {*r0, *g0, *b0, *a0}, {*r1, *g1, *b1, *a1}});
     }
     return core::Result<std::vector<PaletteColour>, ExportError>::failure(make_error(
         "node '" + std::string(node_id) + "' is not a palette node supported by the exporter"));
@@ -193,9 +187,7 @@ struct TickSelection final {
             "could not create export file: " + path.string()));
     }
     if (!bytes.empty()) {
-        output.write(
-            reinterpret_cast<const char*>(bytes.data()),
-            static_cast<std::streamsize>(bytes.size()));
+        output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     }
     output.flush();
     if (!output) {
@@ -213,9 +205,7 @@ struct TickSelection final {
         return core::Result<ExportedFile, ExportError>::failure(make_error(
             "could not reopen produced export file: " + path.string()));
     }
-    const std::string bytes{
-        std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>()};
+    const std::string bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     if (!input.good() && !input.eof()) {
         return core::Result<ExportedFile, ExportError>::failure(make_error(
             "failed while checksumming produced export file: " + path.string()));
@@ -226,50 +216,8 @@ struct TickSelection final {
             "could not derive an export-relative produced filename"));
     }
     return core::Result<ExportedFile, ExportError>::success(ExportedFile{
-        relative.generic_string(),
-        static_cast<core::u64>(bytes.size()),
-        core::hex_u64(core::fnv1a64(std::string_view(bytes))),
-    });
-}
-
-[[nodiscard]] std::filesystem::path provenance_path(const std::filesystem::path& asset_path) {
-    std::filesystem::path result = asset_path;
-    result += L".artminer.txt";
-    return result;
-}
-
-[[nodiscard]] std::string provenance_text(
-    const core::Recipe& recipe,
-    const nodes::Image& image,
-    const RasterFormat format,
-    const TickSelection& ticks) {
-    auto stream = deterministic_stream();
-    stream << "ArtMiner-Provenance 2\n"
-           << "exporter " << kExporterSemanticVersion << '\n'
-           << "fingerprint " << core::semantic_fingerprint(recipe) << '\n'
-           << "schema " << recipe.schema_version << '\n'
-           << "evaluator " << recipe.evaluator_version << '\n'
-           << "width " << image.width << '\n'
-           << "height " << image.height << '\n'
-           << "source-pixel-layout RGBA8-row-major-tight\n"
-           << "colour-space sRGB-encoded\n"
-           << "alpha " << (format == RasterFormat::bmp ? "opaque-required" : "straight") << '\n'
-           << "asset-format " << to_string(format) << '\n';
-    if (format == RasterFormat::raw_rgba) {
-        stream << "raw-channel-order RGBA\n"
-               << "raw-row-order top-to-bottom\n"
-               << "raw-stride-bytes " << static_cast<core::u64>(image.width) * 4ULL << '\n';
-    }
-    if (ticks.single) {
-        stream << "tick " << *ticks.single << '\n';
-    }
-    if (ticks.first && ticks.last) {
-        stream << "tick-range " << *ticks.first << ' ' << *ticks.last << '\n';
-    }
-    stream << "recipe-begin\n"
-           << core::serialize_recipe_canonical(recipe)
-           << "recipe-end\n";
-    return stream.str();
+        relative.generic_string(), static_cast<core::u64>(bytes.size()),
+        core::hex_u64(core::fnv1a64(std::string_view(bytes)))});
 }
 
 [[nodiscard]] core::Result<void, ExportError> append_description(
@@ -284,6 +232,71 @@ struct TickSelection final {
     return core::Result<void, ExportError>::success();
 }
 
+[[nodiscard]] std::filesystem::path provenance_path(const std::filesystem::path& asset_path) {
+    std::filesystem::path result = asset_path;
+    result += L".artminer.txt";
+    return result;
+}
+
+void append_workflow_provenance(
+    std::ostringstream& stream,
+    const std::string_view output_name,
+    const WorkflowProvenance& workflow) {
+    stream << "output-name " << std::quoted(std::string(output_name)) << '\n'
+           << "workflow-semantic " << workflow.output.semantic << '\n';
+    for (const auto& [channel, source] : workflow.output.mappings) {
+        stream << "material-map " << std::quoted(channel) << ' ' << std::quoted(source) << '\n';
+    }
+    for (const auto& [key, value] : workflow.output.settings) {
+        stream << "material-setting " << std::quoted(key) << ' ' << std::quoted(value) << '\n';
+    }
+    if (workflow.loop) {
+        const auto& loop = *workflow.loop;
+        stream << "loop-length " << loop.loop_length << '\n'
+               << "loop-validated " << (loop.validated ? "yes" : "no") << '\n'
+               << "loop-stateful " << (loop.contains_stateful_nodes ? "yes" : "no") << '\n'
+               << "loop-endpoint-error " << loop.endpoint_error << '\n'
+               << "loop-transition-error " << loop.transition_error << '\n'
+               << "loop-tolerance " << loop.tolerance << '\n'
+               << "loop-reason " << std::quoted(loop.reason) << '\n';
+    }
+}
+
+[[nodiscard]] std::string provenance_text(
+    const core::Recipe& recipe,
+    const nodes::Image& image,
+    const RasterFormat format,
+    const TickSelection& ticks,
+    const std::string_view output_name,
+    const WorkflowProvenance& workflow) {
+    auto stream = deterministic_stream();
+    stream << "ArtMiner-Provenance 2\n"
+           << "exporter " << kExporterSemanticVersion << '\n'
+           << "fingerprint " << core::semantic_fingerprint(recipe) << '\n'
+           << "schema " << recipe.schema_version << '\n'
+           << "evaluator " << recipe.evaluator_version << '\n'
+           << "width " << image.width << '\n'
+           << "height " << image.height << '\n'
+           << "source-pixel-layout RGBA8-row-major-tight\n"
+           << "colour-space sRGB-encoded\n"
+           << "alpha " << (format == RasterFormat::bmp ? "opaque-required" : "straight") << '\n'
+           << "asset-format " << to_string(format) << '\n';
+    append_workflow_provenance(stream, output_name, workflow);
+    if (format == RasterFormat::raw_rgba) {
+        stream << "raw-channel-order RGBA\n"
+               << "raw-row-order top-to-bottom\n"
+               << "raw-stride-bytes " << static_cast<core::u64>(image.width) * 4ULL << '\n';
+    }
+    if (ticks.single) {
+        stream << "tick " << *ticks.single << '\n';
+    }
+    if (ticks.first && ticks.last) {
+        stream << "tick-range " << *ticks.first << ' ' << *ticks.last << '\n';
+    }
+    stream << "recipe-begin\n" << core::serialize_recipe_canonical(recipe) << "recipe-end\n";
+    return stream.str();
+}
+
 [[nodiscard]] core::Result<void, ExportError> write_raster_asset(
     const std::filesystem::path& root,
     const std::filesystem::path& path,
@@ -291,6 +304,8 @@ struct TickSelection final {
     const core::Recipe& recipe,
     const RasterFormat format,
     const TickSelection& ticks,
+    const std::string_view output_name,
+    const WorkflowProvenance& workflow,
     std::vector<ExportedFile>& files) {
     if (format == RasterFormat::raw_rgba) {
         auto written = write_bytes(path, image.rgba);
@@ -299,8 +314,7 @@ struct TickSelection final {
         }
     } else {
         const auto wic_format = format == RasterFormat::bmp
-            ? windows::WicImageFormat::bmp
-            : windows::WicImageFormat::png;
+            ? windows::WicImageFormat::bmp : windows::WicImageFormat::png;
         auto written = windows::write_wic_image(path, image, wic_format);
         if (written.is_error()) {
             return core::Result<void, ExportError>::failure(make_error(written.error().message));
@@ -310,34 +324,60 @@ struct TickSelection final {
     if (described.is_error()) {
         return described;
     }
-
     const std::filesystem::path sidecar = provenance_path(path);
-    auto sidecar_written = write_text(sidecar, provenance_text(recipe, image, format, ticks));
+    auto sidecar_written = write_text(
+        sidecar, provenance_text(recipe, image, format, ticks, output_name, workflow));
     if (sidecar_written.is_error()) {
         return sidecar_written;
     }
     return append_description(root, sidecar, files);
 }
 
-[[nodiscard]] core::Result<nodes::Image, ExportError> render_tick(
+[[nodiscard]] core::Result<nodes::Image, ExportError> render_still(
     const core::Recipe& recipe,
-    const core::u64 tick,
-    nodes::FrameSnapshotCache* cache) {
-    auto rendered = nodes::render_animation_reference(recipe, tick, "main", cache);
+    const std::string_view output_name) {
+    auto rendered = nodes::render_workflow_reference(recipe, output_name);
     if (rendered.is_error()) {
         return core::Result<nodes::Image, ExportError>::failure(make_error(
-            "animation render failed at tick " + std::to_string(tick) + ": " + rendered.error().message));
+            "reference/workflow render failed: " + rendered.error().message));
     }
     return core::Result<nodes::Image, ExportError>::success(std::move(rendered).value());
 }
 
-[[nodiscard]] core::Result<nodes::Image, ExportError> render_still(const core::Recipe& recipe) {
-    auto rendered = nodes::render_reference(recipe);
+[[nodiscard]] core::Result<nodes::Image, ExportError> render_tick(
+    const core::Recipe& recipe,
+    const core::u64 tick,
+    const std::string_view output_name) {
+    auto rendered = nodes::render_workflow_tick_reference(recipe, tick, output_name);
     if (rendered.is_error()) {
         return core::Result<nodes::Image, ExportError>::failure(make_error(
-            "reference render failed: " + rendered.error().message));
+            "animation/workflow render failed at tick " + std::to_string(tick) + ": " + rendered.error().message));
     }
     return core::Result<nodes::Image, ExportError>::success(std::move(rendered).value());
+}
+
+[[nodiscard]] core::Result<WorkflowProvenance, ExportError> build_workflow_provenance(
+    const core::Recipe& recipe,
+    const ExportRequest& request) {
+    WorkflowProvenance result;
+    auto described = nodes::describe_workflow_output(recipe, request.output_name);
+    if (described.is_error()) {
+        return core::Result<WorkflowProvenance, ExportError>::failure(make_error(described.error().message));
+    }
+    result.output = std::move(described).value();
+    if (request.loop_length) {
+        auto validated = nodes::validate_workflow_loop(recipe, *request.loop_length, request.output_name);
+        if (validated.is_error()) {
+            return core::Result<WorkflowProvenance, ExportError>::failure(make_error(
+                "loop validation failed: " + validated.error().message));
+        }
+        result.loop = std::move(validated).value();
+        if (request.require_validated_loop && !result.loop->validated) {
+            return core::Result<WorkflowProvenance, ExportError>::failure(make_error(
+                "loop export was requested as validated, but continuity proof failed: " + result.loop->reason));
+        }
+    }
+    return core::Result<WorkflowProvenance, ExportError>::success(std::move(result));
 }
 
 [[nodiscard]] std::string manifest_text(
@@ -345,6 +385,7 @@ struct TickSelection final {
     const ExportRequest& request,
     const core::u32 width,
     const core::u32 height,
+    const WorkflowProvenance& workflow,
     const std::vector<ExportedFile>& files) {
     auto stream = deterministic_stream();
     stream << "ArtMiner-Export-Manifest 1\n"
@@ -355,6 +396,7 @@ struct TickSelection final {
            << "kind " << to_string(request.kind) << '\n'
            << "width " << width << '\n'
            << "height " << height << '\n';
+    append_workflow_provenance(stream, request.output_name, workflow);
     const bool raster = request.kind == ExportKind::still || request.kind == ExportKind::frame ||
         request.kind == ExportKind::sequence || request.kind == ExportKind::sprite_sheet;
     if (raster) {
@@ -363,9 +405,7 @@ struct TickSelection final {
                << "colour-space sRGB-encoded\n"
                << "alpha " << (request.raster_format == RasterFormat::bmp ? "opaque-required" : "straight") << '\n';
     } else {
-        stream << "raster-format none\n"
-               << "colour-space sRGB-encoded\n"
-               << "alpha palette-defined\n";
+        stream << "raster-format none\ncolour-space sRGB-encoded\nalpha palette-defined\n";
     }
     if (request.kind == ExportKind::frame && request.tick) {
         stream << "tick " << *request.tick << '\n';
@@ -385,19 +425,17 @@ struct TickSelection final {
         stream << "file " << std::quoted(file.relative_path) << ' '
                << file.byte_count << ' ' << file.checksum_fnv1a64 << '\n';
     }
-    stream << "recipe-begin\n"
-           << core::serialize_recipe_canonical(recipe)
-           << "recipe-end\n";
+    stream << "recipe-begin\n" << core::serialize_recipe_canonical(recipe) << "recipe-end\n";
     return stream.str();
 }
 
 [[nodiscard]] core::Result<void, ExportError> validate_request(
     const core::Recipe& recipe,
     const ExportRequest& request) {
-    const auto validation_errors = core::validate_recipe(recipe);
-    if (!validation_errors.empty()) {
+    const auto errors = core::validate_recipe(recipe);
+    if (!errors.empty()) {
         return core::Result<void, ExportError>::failure(make_error(
-            "export requires a valid recipe: " + validation_errors.front().message));
+            "export requires a valid recipe: " + errors.front().message));
     }
     if (request.destination_directory.empty()) {
         return core::Result<void, ExportError>::failure(make_error(
@@ -407,14 +445,17 @@ struct TickSelection final {
         return core::Result<void, ExportError>::failure(make_error(
             "export stem must contain only ASCII letters, digits, '.', '-' or '_' and must not be '.' or '..'"));
     }
+    if (request.output_name.empty()) {
+        return core::Result<void, ExportError>::failure(make_error("export output name must not be empty"));
+    }
+    if (request.require_validated_loop && !request.loop_length) {
+        return core::Result<void, ExportError>::failure(make_error(
+            "require_validated_loop requires an explicit loop_length"));
+    }
     if (request.kind == ExportKind::frame) {
-        if (!request.tick) {
+        if (!request.tick || *request.tick > nodes::kMaximumAnimationTick) {
             return core::Result<void, ExportError>::failure(make_error(
-                "frame export requires an explicit tick"));
-        }
-        if (*request.tick > nodes::kMaximumAnimationTick) {
-            return core::Result<void, ExportError>::failure(make_error(
-                "frame export tick exceeds the canonical animation limit"));
+                "frame export requires an explicit tick within the canonical animation limit"));
         }
     }
     if (request.kind == ExportKind::sequence || request.kind == ExportKind::sprite_sheet) {
@@ -423,18 +464,17 @@ struct TickSelection final {
                 "animation export requires start_tick <= end_tick"));
         }
         const core::u64 count = request.end_tick - request.start_tick + 1ULL;
-        if (count > kMaximumExportFrames) {
+        if (count > kMaximumExportFrames || request.end_tick > nodes::kMaximumAnimationTick) {
             return core::Result<void, ExportError>::failure(make_error(
-                "animation export is limited to 256 inclusive frames"));
-        }
-        if (request.end_tick > nodes::kMaximumAnimationTick) {
-            return core::Result<void, ExportError>::failure(make_error(
-                "animation export range exceeds the canonical animation limit"));
+                "animation export exceeds the 256-frame or canonical tick limit"));
         }
         if (request.kind == ExportKind::sprite_sheet && request.sheet_columns == 0U) {
             return core::Result<void, ExportError>::failure(make_error(
                 "sprite-sheet columns must be greater than zero"));
         }
+    } else if (request.loop_length) {
+        return core::Result<void, ExportError>::failure(make_error(
+            "loop continuity provenance is supported on sequence and sprite-sheet exports"));
     }
     if ((request.kind == ExportKind::palette_text || request.kind == ExportKind::palette_csv ||
          request.kind == ExportKind::cube_lut) && request.palette_node_id.empty()) {
@@ -516,12 +556,9 @@ core::Result<nodes::Image, ExportError> compose_sprite_sheet(
                 "sprite-sheet frames must have equal dimensions and valid RGBA8 byte layouts"));
         }
     }
-
     const core::u64 actual_columns = (std::min)(
-        static_cast<core::u64>(columns),
-        static_cast<core::u64>(frames.size()));
-    const core::u64 rows =
-        (static_cast<core::u64>(frames.size()) + actual_columns - 1ULL) / actual_columns;
+        static_cast<core::u64>(columns), static_cast<core::u64>(frames.size()));
+    const core::u64 rows = (static_cast<core::u64>(frames.size()) + actual_columns - 1ULL) / actual_columns;
     const core::u64 sheet_width = static_cast<core::u64>(first.width) * actual_columns;
     const core::u64 sheet_height = static_cast<core::u64>(first.height) * rows;
     if (sheet_width > static_cast<core::u64>((std::numeric_limits<core::u32>::max)()) ||
@@ -530,15 +567,12 @@ core::Result<nodes::Image, ExportError> compose_sprite_sheet(
             "sprite-sheet dimensions exceed the canonical u32 image extent"));
     }
     auto sheet_bytes = core::checked_image_byte_count(
-        static_cast<core::u32>(sheet_width),
-        static_cast<core::u32>(sheet_height),
-        4U);
+        static_cast<core::u32>(sheet_width), static_cast<core::u32>(sheet_height), 4U);
     if (sheet_bytes.is_error() ||
         sheet_bytes.value() > static_cast<core::u64>((std::numeric_limits<std::size_t>::max)())) {
         return core::Result<nodes::Image, ExportError>::failure(make_error(
             "sprite-sheet byte count exceeds addressable memory"));
     }
-
     nodes::Image sheet;
     sheet.width = static_cast<core::u32>(sheet_width);
     sheet.height = static_cast<core::u32>(sheet_height);
@@ -554,8 +588,7 @@ core::Result<nodes::Image, ExportError> compose_sprite_sheet(
                 (row * static_cast<std::size_t>(first.height) + static_cast<std::size_t>(y)) * sheet_stride +
                 column * source_stride;
             std::copy_n(
-                frames[frame_index].rgba.begin() + static_cast<std::ptrdiff_t>(source_offset),
-                source_stride,
+                frames[frame_index].rgba.begin() + static_cast<std::ptrdiff_t>(source_offset), source_stride,
                 sheet.rgba.begin() + static_cast<std::ptrdiff_t>(destination_offset));
         }
     }
@@ -579,10 +612,8 @@ core::Result<std::string, ExportError> serialize_palette(
             stream << index << ',' << colour.r << ',' << colour.g << ',' << colour.b << ',' << colour.a << '\n';
         }
     } else {
-        stream << "# ArtMiner palette 1\n"
-               << "# recipe " << core::semantic_fingerprint(recipe) << '\n'
-               << "# node " << palette_node_id << '\n'
-               << "# columns: index r g b a\n";
+        stream << "# ArtMiner palette 1\n# recipe " << core::semantic_fingerprint(recipe) << '\n'
+               << "# node " << palette_node_id << "\n# columns: index r g b a\n";
         for (std::size_t index = 0U; index < colours.size(); ++index) {
             const auto& colour = colours[index];
             stream << index << ' ' << colour.r << ' ' << colour.g << ' ' << colour.b << ' ' << colour.a << '\n';
@@ -613,15 +644,12 @@ core::Result<std::string, ExportError> serialize_cube_lut(
                 ".cube export supports only channel-neutral palette transfers; a coloured scalar palette cannot be represented losslessly without inventing RGB-to-scalar semantics"));
         }
     }
-
     auto stream = deterministic_stream();
-    stream << "# ArtMiner .cube export 1\n"
-           << "# recipe " << core::semantic_fingerprint(recipe) << '\n'
+    stream << "# ArtMiner .cube export 1\n# recipe " << core::semantic_fingerprint(recipe) << '\n'
            << "# palette-node " << palette_node_id << '\n'
            << "TITLE \"ArtMiner " << core::semantic_fingerprint(recipe) << "\"\n"
            << "LUT_1D_SIZE " << colours.size() << '\n'
-           << "DOMAIN_MIN 0 0 0\n"
-           << "DOMAIN_MAX 1 1 1\n";
+           << "DOMAIN_MIN 0 0 0\nDOMAIN_MAX 1 1 1\n";
     for (const auto& colour : colours) {
         stream << colour.r << ' ' << colour.g << ' ' << colour.b << '\n';
     }
@@ -636,6 +664,11 @@ core::Result<ExportResult, ExportError> export_recipe(
     if (request_valid.is_error()) {
         return core::Result<ExportResult, ExportError>::failure(request_valid.error());
     }
+    auto workflow_result = build_workflow_provenance(recipe, request);
+    if (workflow_result.is_error()) {
+        return core::Result<ExportResult, ExportError>::failure(workflow_result.error());
+    }
+    const WorkflowProvenance workflow = std::move(workflow_result).value();
 
     const std::filesystem::path destination = request.destination_directory;
     const std::filesystem::path staging = staging_path_for_destination(destination);
@@ -656,10 +689,8 @@ core::Result<ExportResult, ExportError> export_recipe(
         return core::Result<ExportResult, ExportError>::failure(make_error(
             "could not inspect export staging path: " + filesystem_error.message()));
     }
-
     const std::filesystem::path parent = destination.parent_path().empty()
-        ? std::filesystem::path(L".")
-        : destination.parent_path();
+        ? std::filesystem::path(L".") : destination.parent_path();
     std::filesystem::create_directories(parent, filesystem_error);
     if (filesystem_error) {
         return core::Result<ExportResult, ExportError>::failure(make_error(
@@ -692,17 +723,12 @@ core::Result<ExportResult, ExportError> export_recipe(
         const nodes::Image& image,
         const TickSelection& ticks) -> core::Result<void, ExportError> {
         return write_raster_asset(
-            staging,
-            path,
-            image,
-            recipe,
-            request.raster_format,
-            ticks,
-            result.files);
+            staging, path, image, recipe, request.raster_format, ticks,
+            request.output_name, workflow, result.files);
     };
 
     if (request.kind == ExportKind::still) {
-        auto image = render_still(recipe);
+        auto image = render_still(recipe, request.output_name);
         if (image.is_error()) {
             return fail(image.error());
         }
@@ -714,8 +740,7 @@ core::Result<ExportResult, ExportError> export_recipe(
             return fail(written.error());
         }
     } else if (request.kind == ExportKind::frame) {
-        nodes::FrameSnapshotCache cache(8U);
-        auto image = render_tick(recipe, *request.tick, &cache);
+        auto image = render_tick(recipe, *request.tick, request.output_name);
         if (image.is_error()) {
             return fail(image.error());
         }
@@ -732,9 +757,8 @@ core::Result<ExportResult, ExportError> export_recipe(
         if (!std::filesystem::create_directory(frames_directory, filesystem_error) || filesystem_error) {
             return fail(make_error("could not create sequence frames directory"));
         }
-        nodes::FrameSnapshotCache cache(32U);
         for (core::u64 tick = request.start_tick;; ++tick) {
-            auto image = render_tick(recipe, tick, &cache);
+            auto image = render_tick(recipe, tick, request.output_name);
             if (image.is_error()) {
                 return fail(image.error());
             }
@@ -744,7 +768,8 @@ core::Result<ExportResult, ExportError> export_recipe(
             }
             const std::filesystem::path path = frames_directory /
                 deterministic_frame_filename(tick, request.raster_format);
-            auto written = write_asset(path, image.value(), TickSelection{tick, request.start_tick, request.end_tick});
+            auto written = write_asset(
+                path, image.value(), TickSelection{tick, request.start_tick, request.end_tick});
             if (written.is_error()) {
                 return fail(written.error());
             }
@@ -753,11 +778,10 @@ core::Result<ExportResult, ExportError> export_recipe(
             }
         }
     } else if (request.kind == ExportKind::sprite_sheet) {
-        nodes::FrameSnapshotCache cache(32U);
         std::vector<nodes::Image> frames;
         frames.reserve(static_cast<std::size_t>(request.end_tick - request.start_tick + 1ULL));
         for (core::u64 tick = request.start_tick;; ++tick) {
-            auto image = render_tick(recipe, tick, &cache);
+            auto image = render_tick(recipe, tick, request.output_name);
             if (image.is_error()) {
                 return fail(image.error());
             }
@@ -775,16 +799,12 @@ core::Result<ExportResult, ExportError> export_recipe(
         const std::filesystem::path sheet_path = staging /
             (request.stem + "-sheet" + extension_for(request.raster_format));
         auto written = write_asset(
-            sheet_path,
-            sheet.value(),
-            TickSelection{{}, request.start_tick, request.end_tick});
+            sheet_path, sheet.value(), TickSelection{{}, request.start_tick, request.end_tick});
         if (written.is_error()) {
             return fail(written.error());
         }
-
         const core::u32 actual_columns = (std::min)(
-            request.sheet_columns,
-            static_cast<core::u32>(frames.size()));
+            request.sheet_columns, static_cast<core::u32>(frames.size()));
         auto atlas = deterministic_stream();
         atlas << "tick,x,y,width,height\n";
         for (std::size_t index = 0U; index < frames.size(); ++index) {
@@ -839,19 +859,16 @@ core::Result<ExportResult, ExportError> export_recipe(
     if (core::semantic_fingerprint(recipe) != source_fingerprint) {
         return fail(make_error("export unexpectedly changed the source recipe semantic fingerprint"));
     }
-
     const std::filesystem::path staging_manifest = staging / L"manifest.artminer.txt";
     auto manifest_written = write_text(
         staging_manifest,
-        manifest_text(recipe, request, manifest_width, manifest_height, result.files));
+        manifest_text(recipe, request, manifest_width, manifest_height, workflow, result.files));
     if (manifest_written.is_error()) {
         return fail(manifest_written.error());
     }
-
     std::filesystem::rename(staging, destination, filesystem_error);
     if (filesystem_error) {
-        return fail(make_error(
-            "could not atomically publish completed export set: " + filesystem_error.message()));
+        return fail(make_error("could not publish completed export set atomically: " + filesystem_error.message()));
     }
     return core::Result<ExportResult, ExportError>::success(std::move(result));
 }

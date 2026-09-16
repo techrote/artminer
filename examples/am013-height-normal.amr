@@ -1,0 +1,32 @@
+# Explicit image -> semantic height -> deterministic normal conversion.
+# The normal stage rejects ordinary RGB/scalar data that bypasses height_from_image.
+amr 1
+evaluator 1
+seed 13014
+render 96 96 "reference"
+node "field" "core.sdf.circle" 1
+param "field" "center_x" f64 0.5
+param "field" "center_y" f64 0.5
+param "field" "radius" f64 0.32
+node "source" "core.image.from_scalar" 1
+param "source" "palette" enum "grayscale"
+node "height" "core.material.height_from_image" 1
+param "height" "channel" enum "luminance"
+param "height" "minimum" f64 0
+param "height" "maximum" f64 1
+param "height" "invert" enum "yes"
+node "height_image" "core.material.height_image" 1
+node "normal" "core.material.normal_from_height" 1
+param "normal" "filter" enum "sobel"
+param "normal" "edge" enum "clamp"
+param "normal" "strength" f64 4
+param "normal" "texel_scale" f64 1
+param "normal" "handedness" enum "right"
+param "normal" "convention" enum "opengl"
+edge "field" "value" "source" "source"
+edge "source" "value" "height" "source"
+edge "height" "height" "height_image" "height"
+edge "height" "height" "normal" "height"
+output "main" "normal" "value"
+output "height" "height_image" "value"
+meta "example.family" "am013-height-normal"

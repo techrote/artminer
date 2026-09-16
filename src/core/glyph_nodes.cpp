@@ -4,6 +4,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/material_nodes.hpp"
+
 namespace artminer::core {
 namespace {
 
@@ -110,6 +112,10 @@ void append_glyph_node_metadata(std::vector<NodeMetadata>& nodes) {
         NodeStateClass::stateless,
         output_stage_only,
     });
+
+    // Keep later output/workflow contracts chained through the same built-in
+    // registry path so validation, mutation and breeding see one metadata source.
+    append_material_node_metadata(nodes);
 }
 
 }  // namespace artminer::core
