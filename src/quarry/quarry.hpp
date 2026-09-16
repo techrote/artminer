@@ -109,7 +109,7 @@ struct QuarryError final {
     core::u32 render_width,
     core::u32 render_height,
     double mutation_strength = 0.25,
-    std::vector<std::string> metrics = supported_metric_names(),
+    std::vector<std::string> metrics = default_still_metric_names(),
     AnimationSampling animation = {});
 [[nodiscard]] std::string serialize_job_manifest(const JobManifest& manifest);
 [[nodiscard]] core::Result<JobManifest, QuarryError> parse_job_manifest(std::string_view text);
