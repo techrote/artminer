@@ -39,6 +39,16 @@ namespace {
     return found == parameters.end() ? nullptr : &*found;
 }
 
+[[nodiscard]] const ParameterAssignment* find_assignment(
+    const NodeInstance& node,
+    const std::string_view name) noexcept {
+    const auto found = std::find_if(
+        node.parameters.begin(),
+        node.parameters.end(),
+        [name](const ParameterAssignment& assignment) { return assignment.name == name; });
+    return found == node.parameters.end() ? nullptr : &*found;
+}
+
 [[nodiscard]] ParameterKind parameter_kind(const ParameterValue& value) noexcept {
     if (std::holds_alternative<i64>(value)) {
         return ParameterKind::integer;
@@ -87,6 +97,31 @@ void add_error(
     const ValidationErrorCode code,
     std::string message) {
     errors.push_back(ValidationError{code, std::move(message)});
+}
+
+void validate_node_parameter_relations(
+    const NodeInstance& node,
+    std::vector<ValidationError>& errors) {
+    // Relational constraints that affect evaluator legality belong in recipe
+    // validation as well as evaluator preflight. A recipe accepted by the
+    // public validator must not fail later merely because two individually
+    // in-domain parameters form an illegal combination.
+    if (node.type_id == "core.scalar.quantize") {
+        const ParameterAssignment* minimum = find_assignment(node, "minimum");
+        const ParameterAssignment* maximum = find_assignment(node, "maximum");
+        if (minimum != nullptr && maximum != nullptr &&
+            std::holds_alternative<double>(minimum->value) &&
+            std::holds_alternative<double>(maximum->value)) {
+            const double minimum_value = std::get<double>(minimum->value);
+            const double maximum_value = std::get<double>(maximum->value);
+            if (std::isfinite(minimum_value) && std::isfinite(maximum_value) && maximum_value <= minimum_value) {
+                add_error(
+                    errors,
+                    ValidationErrorCode::parameter_out_of_domain,
+                    "node '" + node.id + "' quantize maximum must be greater than minimum");
+            }
+        }
+    }
 }
 
 }  // namespace
@@ -208,6 +243,7 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
                     "node '" + node.id + "' is missing explicit parameter '" + spec.name + "'");
             }
         }
+        validate_node_parameter_relations(node, errors);
     }
 
     using EdgeKey = std::tuple<std::string, std::string, std::string, std::string>;
