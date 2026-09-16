@@ -192,3 +192,7 @@ add_test(
     NAME artminer.render.feedback-tick
     COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-feedback-trails.amr" 4 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-feedback.png")
 set_tests_properties(artminer.render.feedback-tick PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 4 .* image-hash")
+add_test(
+    NAME artminer.render.motion-range
+    COMMAND ArtMiner render-range "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 0 2 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-range")
+set_tests_properties(artminer.render.motion-range PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 2 .* image-hash")
