@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "core/hash.hpp"
+#include "core/local_text.hpp"
 
 namespace artminer::core {
 namespace {
@@ -311,6 +312,15 @@ template <typename T>
 }  // namespace
 
 Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
+    auto source_validation = validate_local_text(text);
+    if (source_validation.is_error()) {
+        const RecipeErrorCode code = text.size() > kMaximumRecipeFileBytes
+            ? RecipeErrorCode::resource_limit
+            : RecipeErrorCode::malformed;
+        return Result<Recipe, RecipeError>::failure(
+            make_error(code, 0U, "recipe source rejected: " + source_validation.error().message));
+    }
+
     if (text.size() >= 3U && static_cast<unsigned char>(text[0]) == 0xefU &&
         static_cast<unsigned char>(text[1]) == 0xbbU && static_cast<unsigned char>(text[2]) == 0xbfU) {
         text.remove_prefix(3U);
@@ -321,6 +331,7 @@ Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
     bool saw_evaluator = false;
     bool saw_seed = false;
     bool saw_render = false;
+    std::size_t total_parameters = 0U;
 
     std::size_t line_number = 0U;
     std::size_t offset = 0U;
@@ -390,6 +401,10 @@ Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
                 recipe.render.quality = tokens[3];
                 saw_render = true;
             } else if (record == "node") {
+                if (recipe.nodes.size() >= kMaximumRecipeNodes) {
+                    return Result<Recipe, RecipeError>::failure(make_error(
+                        RecipeErrorCode::resource_limit, line_number, "recipe exceeds the 4096-node safety limit"));
+                }
                 NodeInstance node;
                 if (tokens.size() != 4U || !parse_integer(tokens[3], node.semantic_version)) {
                     return Result<Recipe, RecipeError>::failure(make_error(
@@ -401,6 +416,10 @@ Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
                 node.type_id = tokens[2];
                 recipe.nodes.push_back(std::move(node));
             } else if (record == "param") {
+                if (total_parameters >= kMaximumRecipeParameters) {
+                    return Result<Recipe, RecipeError>::failure(make_error(
+                        RecipeErrorCode::resource_limit, line_number, "recipe exceeds the 65536-parameter safety limit"));
+                }
                 if (tokens.size() != 5U) {
                     return Result<Recipe, RecipeError>::failure(make_error(
                         RecipeErrorCode::malformed,
@@ -448,7 +467,12 @@ Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
                         RecipeErrorCode::malformed, line_number, "unsupported parameter value type tag: " + tokens[3]));
                 }
                 node->parameters.push_back(ParameterAssignment{tokens[2], std::move(value)});
+                ++total_parameters;
             } else if (record == "edge") {
+                if (recipe.edges.size() >= kMaximumRecipeEdges) {
+                    return Result<Recipe, RecipeError>::failure(make_error(
+                        RecipeErrorCode::resource_limit, line_number, "recipe exceeds the 16384-edge safety limit"));
+                }
                 if (tokens.size() != 5U) {
                     return Result<Recipe, RecipeError>::failure(make_error(
                         RecipeErrorCode::malformed,
@@ -457,6 +481,10 @@ Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
                 }
                 recipe.edges.push_back(Edge{tokens[1], tokens[2], tokens[3], tokens[4]});
             } else if (record == "output") {
+                if (recipe.outputs.size() >= kMaximumRecipeOutputs) {
+                    return Result<Recipe, RecipeError>::failure(make_error(
+                        RecipeErrorCode::resource_limit, line_number, "recipe exceeds the 1024-output safety limit"));
+                }
                 if (tokens.size() != 4U) {
                     return Result<Recipe, RecipeError>::failure(make_error(
                         RecipeErrorCode::malformed,
@@ -465,6 +493,10 @@ Result<Recipe, RecipeError> parse_recipe(std::string_view text) {
                 }
                 recipe.outputs.push_back(OutputBinding{tokens[1], tokens[2], tokens[3]});
             } else if (record == "meta") {
+                if (recipe.metadata.size() >= kMaximumRecipeMetadata) {
+                    return Result<Recipe, RecipeError>::failure(make_error(
+                        RecipeErrorCode::resource_limit, line_number, "recipe exceeds the 4096-metadata-record safety limit"));
+                }
                 if (tokens.size() != 3U) {
                     return Result<Recipe, RecipeError>::failure(make_error(
                         RecipeErrorCode::malformed, line_number, "meta record must be: meta <namespaced-key> <value>"));
