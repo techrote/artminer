@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include "app/quarry_diversity_command.hpp"
 #include "app/quarry_window.hpp"
 #include "core/recipe.hpp"
 #include "quarry/quarry.hpp"
@@ -123,13 +124,22 @@ void print_quarry_help() {
         << "  ArtMiner quarry run <job.amq> [workers]\n"
         << "  ArtMiner quarry resume <job.amq> [workers]\n"
         << "  ArtMiner quarry inspect <job.amq>\n"
-        << "  ArtMiner quarry ui <job.amq>\n\n"
+        << "  ArtMiner quarry ui <job.amq>\n"
+        << "  ArtMiner quarry dedupe <job.amq> [metric-threshold] [image-threshold] [--weights name=value,...]\n"
+        << "  ArtMiner quarry cluster <job.amq> <cluster-count> [--weights name=value,...]\n"
+        << "  ArtMiner quarry rank <job.amq> <population|cluster> [cluster-count] [--weights name=value,...]\n"
+        << "  ArtMiner quarry neighbours <job.amq> <candidate-index> <metric|parameter|combined> [limit] ...\n"
+        << "  ArtMiner quarry project <job.amq> <x-metric> <y-metric>\n"
+        << "  ArtMiner quarry filter <job.amq> <metric> <min|*> <max|*> [asc|desc]\n"
+        << "  ArtMiner quarry save <job.amq> <candidate-index> <recipes-root> [--favourite]\n\n"
         << "create embeds the canonical base recipe and all result-affecting search semantics.\n"
         << "The default metric set is still-image only. Select motion_energy and/or\n"
         << "temporal_flicker with --metrics and provide at least two fixed-tick samples\n"
         << "with --animation for animated Quarry jobs.\n"
         << "run/resume share the same bounded deterministic engine; resume verifies the checkpoint\n"
-        << "and committed result prefix before continuing. Worker count is execution policy only.\n";
+        << "and committed result prefix before continuing. Worker count is execution policy only.\n"
+        << "AM-011 analysis actions require a completed job. They preserve raw metrics, use explicit\n"
+        << "normalization/weights, stable tie-breaking, and report distance rather than aesthetic quality.\n";
 }
 
 void print_quarry_error(const quarry::QuarryError& error) {
@@ -144,6 +154,9 @@ int run_quarry_command(const int argc, wchar_t* argv[]) {
         return 2;
     }
     const std::wstring_view action(argv[2]);
+    if (auto diversity = try_run_quarry_diversity_command(argc, argv); diversity.has_value()) {
+        return *diversity;
+    }
     if (action == L"create") {
         if (argc < 6) {
             print_quarry_help();
