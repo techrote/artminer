@@ -213,9 +213,9 @@ struct TickSelection final {
         return core::Result<ExportedFile, ExportError>::failure(make_error(
             "could not reopen produced export file: " + path.string()));
     }
-    const std::string bytes(
+    const std::string bytes{
         std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>()};
     if (!input.good() && !input.eof()) {
         return core::Result<ExportedFile, ExportError>::failure(make_error(
             "failed while checksumming produced export file: " + path.string()));
@@ -674,6 +674,9 @@ core::Result<ExportResult, ExportError> export_recipe(
     const auto fail = [&](ExportError error) -> core::Result<ExportResult, ExportError> {
         std::error_code cleanup_error;
         std::filesystem::remove_all(staging, cleanup_error);
+        if (cleanup_error) {
+            error.message += "; staging cleanup also failed for '" + staging.string() + "': " + cleanup_error.message();
+        }
         return core::Result<ExportResult, ExportError>::failure(std::move(error));
     };
 
