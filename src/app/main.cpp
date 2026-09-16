@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <commdlg.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -385,7 +386,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
         }
         if (LOWORD(w_param) == kCommandOpen) {
             if (auto path = choose_recipe_file(*state); path.has_value()) {
-                load_recipe_into_preview(*state, *path);
+                (void)load_recipe_into_preview(*state, *path);
             }
             return 0;
         }
@@ -397,7 +398,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
     case WM_KEYDOWN:
         if (state != nullptr && w_param == static_cast<WPARAM>('O') && (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
             if (auto path = choose_recipe_file(*state); path.has_value()) {
-                load_recipe_into_preview(*state, *path);
+                (void)load_recipe_into_preview(*state, *path);
             }
             return 0;
         }
@@ -543,7 +544,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l
     }
 
     if (initial_recipe.has_value()) {
-        load_recipe_into_preview(state, *initial_recipe);
+        (void)load_recipe_into_preview(state, *initial_recipe);
     } else {
         update_status(state);
     }
