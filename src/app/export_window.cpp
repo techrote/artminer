@@ -180,7 +180,7 @@ void layout_controls(AppState& state, const int width, const int height) {
     const int control_width = (std::max)(180, width - control_x - kGap);
     int y = kGap;
 
-    const auto place = [&](HWND label, HWND control, const bool combo = false) mutable {
+    const auto place = [&](HWND label, HWND control, const bool combo = false) {
         MoveWindow(label, kGap, y + 4, label_width - kGap, 22, TRUE);
         MoveWindow(control, control_x, y, control_width, combo ? 180 : 26, TRUE);
         y += 36;
