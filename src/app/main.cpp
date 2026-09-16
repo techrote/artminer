@@ -47,7 +47,7 @@ void print_help() {
         << "Headless recipe/render commands use the canonical CPU reference path.\n"
         << "--tick selects the explicit fixed simulation tick; omitted means tick 0.\n"
         << "PNG renders are accompanied by deterministic <output>.artminer.txt\n"
-        << "provenance containing the complete semantic recipe.\n\n"
+        << "provenance containing the complete semantic recipe and requested tick.\n\n"
         << "growth inspect opens a native tick selector with Render and Reset controls.\n"
         << "The selected tick is UI state only and never mutates the saved recipe.\n\n"
         << "Without a headless command ArtMiner opens the native 4x4 specimen browser.\n"
@@ -217,7 +217,7 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
         return 7;
     }
     artminer::nodes::Image image = std::move(rendered).value();
-    auto written = artminer::exporting::windows::write_png_with_provenance(output_path, image, *recipe);
+    auto written = artminer::exporting::windows::write_png_with_provenance(output_path, image, *recipe, tick);
     if (written.is_error()) {
         std::cerr << "export error: " << written.error().message << '\n';
         return 8;
