@@ -1,0 +1,16 @@
+# Seed-keyed fixed-tick walkers with deterministic deposition.
+amr 1
+evaluator 1
+seed 6003
+render 128 128 "reference"
+node "growth" "core.growth.walkers" 1
+param "growth" "tick" i64 900
+param "growth" "walkers" i64 72
+param "growth" "deposit" f64 0.075
+param "growth" "spawn" enum "seeded"
+param "growth" "boundary" enum "repeat"
+node "image" "core.image.from_scalar" 1
+param "image" "palette" enum "heat"
+edge "growth" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "walkers-deposition"
