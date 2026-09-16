@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <optional>
 #include <queue>
 #include <set>
 #include <tuple>
@@ -99,27 +100,43 @@ void add_error(
     errors.push_back(ValidationError{code, std::move(message)});
 }
 
+[[nodiscard]] std::optional<long double> numeric_value(const ParameterValue& value) noexcept {
+    if (const auto* integer = std::get_if<i64>(&value)) {
+        return static_cast<long double>(*integer);
+    }
+    if (const auto* real = std::get_if<double>(&value); real != nullptr && std::isfinite(*real)) {
+        return static_cast<long double>(*real);
+    }
+    return std::nullopt;
+}
+
 void validate_node_parameter_relations(
     const NodeInstance& node,
+    const NodeMetadata& metadata,
     std::vector<ValidationError>& errors) {
-    // Relational constraints that affect evaluator legality belong in recipe
-    // validation as well as evaluator preflight. A recipe accepted by the
-    // public validator must not fail later merely because two individually
-    // in-domain parameters form an illegal combination.
-    if (node.type_id == "core.scalar.quantize") {
-        const ParameterAssignment* minimum = find_assignment(node, "minimum");
-        const ParameterAssignment* maximum = find_assignment(node, "maximum");
-        if (minimum != nullptr && maximum != nullptr &&
-            std::holds_alternative<double>(minimum->value) &&
-            std::holds_alternative<double>(maximum->value)) {
-            const double minimum_value = std::get<double>(minimum->value);
-            const double maximum_value = std::get<double>(maximum->value);
-            if (std::isfinite(minimum_value) && std::isfinite(maximum_value) && maximum_value <= minimum_value) {
-                add_error(
-                    errors,
-                    ValidationErrorCode::parameter_out_of_domain,
-                    "node '" + node.id + "' quantize maximum must be greater than minimum");
-            }
+    for (const ParameterRelation& relation : metadata.parameter_relations) {
+        const ParameterAssignment* left = find_assignment(node, relation.left);
+        const ParameterAssignment* right = find_assignment(node, relation.right);
+        if (left == nullptr || right == nullptr) {
+            continue;
+        }
+        const auto left_value = numeric_value(left->value);
+        const auto right_value = numeric_value(right->value);
+        if (!left_value.has_value() || !right_value.has_value()) {
+            continue;
+        }
+
+        bool satisfied = false;
+        switch (relation.relation) {
+        case ParameterRelationKind::less_than:
+            satisfied = *left_value < *right_value;
+            break;
+        }
+        if (!satisfied) {
+            add_error(
+                errors,
+                ValidationErrorCode::parameter_out_of_domain,
+                "node '" + node.id + "' parameter relation requires '" + relation.left + "' < '" + relation.right + "'");
         }
     }
 }
@@ -243,7 +260,7 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
                     "node '" + node.id + "' is missing explicit parameter '" + spec.name + "'");
             }
         }
-        validate_node_parameter_relations(node, errors);
+        validate_node_parameter_relations(node, *metadata, errors);
     }
 
     using EdgeKey = std::tuple<std::string, std::string, std::string, std::string>;
