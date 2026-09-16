@@ -9,8 +9,6 @@
 #include <condition_variable>
 #include <deque>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -22,8 +20,10 @@
 #include <vector>
 
 #include "core/graph.hpp"
+#include "core/local_text.hpp"
 #include "core/recipe.hpp"
 #include "core/specimen_browser.hpp"
+#include "core/version.hpp"
 #include "gpu/d3d11_preview.hpp"
 #include "nodes/static_evaluator.hpp"
 #include "platform/windows/browser_store.hpp"
@@ -309,17 +309,12 @@ struct AppState final {
 [[nodiscard]] std::optional<std::string> read_text_file(
     const std::filesystem::path& path,
     std::wstring& error) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        error = L"Could not open recipe: " + path.wstring();
+    auto text = core::read_local_text_file(path);
+    if (text.is_error()) {
+        error = L"Could not read bounded UTF-8 recipe: " + path.wstring() + L" (" + widen_utf8(text.error().message) + L")";
         return std::nullopt;
     }
-    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (!input.good() && !input.eof()) {
-        error = L"Failed while reading recipe: " + path.wstring();
-        return std::nullopt;
-    }
-    return text;
+    return std::move(text).value();
 }
 
 [[nodiscard]] std::optional<core::Recipe> load_validated_recipe(
@@ -507,13 +502,25 @@ void refresh_parameter_list(AppState& state) {
         std::to_wstring(state.history->size()) + L" | favourites " + std::to_wstring(state.favourites.size());
     update_status(state);
 
-    std::wstring title = L"ArtMiner — " + fingerprint.substr(0U, (std::min)(std::size_t{12U}, fingerprint.size()));
+    std::wstring title = L"ArtMiner " + widen_utf8(core::kVersion) + L" — " +
+        fingerprint.substr(0U, (std::min)(std::size_t{12U}, fingerprint.size()));
     title += status.path == gpu::PreviewPath::gpu ? L" — GPU Preview" : L" — Canonical CPU Fallback";
     if (state.favourites.contains(fingerprint_before)) {
         title += L" — Favourite";
     }
     SetWindowTextW(state.main_window, title.c_str());
     return true;
+}
+
+void persist_session_recovery(AppState& state) {
+    if (!state.history.has_value()) {
+        return;
+    }
+    auto saved = platform::windows::save_session_recovery(state.workspace.recipes, state.history->current());
+    if (saved.is_error()) {
+        state.status_base += L" | recovery write warning: " + saved.error().message;
+        update_status(state);
+    }
 }
 
 void adopt_recipe(AppState& state, core::Recipe recipe, const std::wstring_view reason) {
@@ -524,6 +531,7 @@ void adopt_recipe(AppState& state, core::Recipe recipe, const std::wstring_view 
     }
     state.selected_slot.reset();
     (void)present_current_recipe(state, reason);
+    persist_session_recovery(state);
     invalidate_specimens(state);
 }
 
@@ -687,6 +695,7 @@ void navigate_history(AppState& state, const bool forward) {
     }
     state.selected_slot.reset();
     (void)present_current_recipe(state, forward ? L"History forward" : L"History back");
+    persist_session_recovery(state);
     invalidate_specimens(state);
 }
 
@@ -1170,6 +1179,10 @@ LRESULT CALLBACK window_proc(HWND window, const UINT message, const WPARAM w_par
         if (state != nullptr) {
             KillTimer(window, kPreviewTimerId);
             state->thumbnail_pool.reset();
+            MSG pending{};
+            while (PeekMessageW(&pending, window, kThumbnailReadyMessage, kThumbnailReadyMessage, PM_REMOVE) != FALSE) {
+                delete reinterpret_cast<ThumbnailMessage*>(pending.lParam);
+            }
         }
         PostQuitMessage(0);
         return 0;
@@ -1290,7 +1303,7 @@ int run_browser_application(
     HWND window = CreateWindowExW(
         0,
         kWindowClass,
-        L"ArtMiner — AM-005 Specimen Browser",
+        L"ArtMiner — Specimen Browser",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
@@ -1307,6 +1320,8 @@ int run_browser_application(
         return 3;
     }
     state.main_window = window;
+    const std::wstring release_title = L"ArtMiner " + widen_utf8(core::kVersion) + L" — Specimen Browser";
+    SetWindowTextW(window, release_title.c_str());
     if (!create_controls(state, instance)) {
         DestroyWindow(window);
         return 3;
@@ -1341,11 +1356,23 @@ int run_browser_application(
         state.status_base = L"Favourite load warning: " + loaded_favourites.error().message;
     }
 
+    std::wstring recovery_warning;
+    auto recovery = platform::windows::load_session_recovery(workspace.recipes);
+    if (recovery.is_error()) {
+        recovery_warning = L"Session recovery ignored: " + recovery.error().message;
+    }
+
     if (initial_recipe.has_value()) {
         open_recipe(state, *initial_recipe);
+    } else if (recovery.is_ok() && recovery.value().has_value()) {
+        adopt_recipe(state, recovery.value()->recipe, L"Restored workspace session recovery");
     } else if (!state.favourites.empty()) {
         adopt_recipe(state, state.favourites.begin()->second.recipe, L"Restored persisted favourite");
     } else {
+        update_status(state);
+    }
+    if (!recovery_warning.empty()) {
+        state.status_base += L" | " + recovery_warning;
         update_status(state);
     }
     if (state.history.has_value()) {

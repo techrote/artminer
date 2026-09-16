@@ -4,10 +4,8 @@
 #include <cmath>
 #include <cwchar>
 #include <filesystem>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <iterator>
 #include <limits>
 #include <optional>
 #include <string>
@@ -16,6 +14,7 @@
 
 #include "app/material_window.hpp"
 #include "core/graph.hpp"
+#include "core/local_text.hpp"
 #include "core/recipe.hpp"
 #include "core/types.hpp"
 #include "export/export.hpp"
@@ -26,17 +25,13 @@ namespace artminer::app {
 namespace {
 
 [[nodiscard]] std::optional<std::string> read_text_file(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        std::wcerr << L"material error: could not open recipe " << path.wstring() << L'\n';
+    auto text = core::read_local_text_file(path);
+    if (text.is_error()) {
+        std::wcerr << L"material error: bounded UTF-8 recipe read rejected " << path.wstring() << L'\n';
+        std::cerr << "detail: " << text.error().message << '\n';
         return std::nullopt;
     }
-    std::string text{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    if (!input.good() && !input.eof()) {
-        std::wcerr << L"material error: failed while reading recipe " << path.wstring() << L'\n';
-        return std::nullopt;
-    }
-    return text;
+    return std::move(text).value();
 }
 
 [[nodiscard]] std::optional<core::Recipe> load_recipe(const std::filesystem::path& path) {

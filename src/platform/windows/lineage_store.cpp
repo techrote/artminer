@@ -4,10 +4,10 @@
 
 #include <algorithm>
 #include <fstream>
-#include <iterator>
 #include <utility>
 
 #include "core/graph.hpp"
+#include "core/local_text.hpp"
 
 namespace artminer::platform::windows {
 namespace {
@@ -34,6 +34,16 @@ namespace {
 [[nodiscard]] core::Result<void, LineageStoreError> write_text_atomic(
     const std::filesystem::path& target,
     const std::string_view text) {
+    if (text.size() > core::kMaximumRecipeFileBytes) {
+        return core::Result<void, LineageStoreError>::failure(
+            make_error(LineageStoreErrorCode::resource_limit, L"lineage text exceeds the 8 MiB release safety limit"));
+    }
+    auto validated_text = core::validate_local_text(text);
+    if (validated_text.is_error()) {
+        return core::Result<void, LineageStoreError>::failure(
+            make_error(LineageStoreErrorCode::invalid_record, L"lineage text is not bounded valid UTF-8"));
+    }
+
     std::error_code error;
     std::filesystem::create_directories(target.parent_path(), error);
     if (error) {
@@ -76,17 +86,12 @@ namespace {
 }
 
 [[nodiscard]] core::Result<std::string, LineageStoreError> read_text(const std::filesystem::path& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
+    auto text = core::read_local_text_file(path);
+    if (text.is_error()) {
         return core::Result<std::string, LineageStoreError>::failure(
-            make_error(LineageStoreErrorCode::read_failed, L"could not open persisted lineage file"));
+            make_error(LineageStoreErrorCode::read_failed, L"persisted lineage file is unreadable, oversized, or invalid UTF-8"));
     }
-    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (!input.good() && !input.eof()) {
-        return core::Result<std::string, LineageStoreError>::failure(
-            make_error(LineageStoreErrorCode::read_failed, L"failed while reading persisted lineage file"));
-    }
-    return core::Result<std::string, LineageStoreError>::success(std::move(text));
+    return core::Result<std::string, LineageStoreError>::success(std::move(text).value());
 }
 
 [[nodiscard]] std::filesystem::path lineage_root(const std::filesystem::path& recipes_root) {
@@ -150,6 +155,10 @@ namespace {
     }
     for (const auto& entry : iterator) {
         if (entry.is_regular_file(error) && !error && entry.path().extension() == extension) {
+            if (paths.size() >= kMaximumPersistedLineageEntries) {
+                return core::Result<std::vector<std::filesystem::path>, LineageStoreError>::failure(
+                    make_error(LineageStoreErrorCode::resource_limit, L"lineage directory exceeds the 4096-entry release safety limit"));
+            }
             paths.push_back(entry.path());
         }
         if (error) {

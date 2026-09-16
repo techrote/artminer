@@ -14,9 +14,11 @@ namespace artminer::core {
 namespace {
 
 constexpr u64 kMutationSequenceDomain = 0x4d55544154494f4eULL;  // "MUTATION"
+constexpr u64 kMutationRetryDomain = 0x4d55545245545259ULL;     // "MUTRETRY"
 constexpr u64 kSeedVariantDomain = 0x5345454456415249ULL;      // "SEEDVARI"
 constexpr u64 kGridMutationDomain = 0x475249444d555441ULL;      // "GRIDMUTA"
 constexpr u64 kGridSeedDomain = 0x4752494453454544ULL;          // "GRIDSEED"
+constexpr std::size_t kMutationAttemptLimit = 32U;
 
 [[nodiscard]] MutationError make_error(const MutationErrorCode code, std::string message) {
     return MutationError{code, std::move(message)};
@@ -385,49 +387,71 @@ Result<Recipe, MutationError> mutate_recipe_parameters(
             make_error(MutationErrorCode::invalid_parent, validation_summary(parent_errors)));
     }
 
-    Recipe child = parent;
     const std::string parent_fingerprint = semantic_fingerprint(parent);
     const u64 parent_domain = fnv1a64(parent_fingerprint);
-    const u64 root = derive_seed(mutation_seed, parent_domain ^ (static_cast<u64>(operator_version) << 32U));
+    const u64 base_root = derive_seed(
+        mutation_seed,
+        parent_domain ^ (static_cast<u64>(operator_version) << 32U));
+    std::vector<ValidationError> last_child_errors;
 
-    for (auto& node : child.nodes) {
-        const NodeMetadata* metadata = registry.find(node.type_id);
-        if (metadata == nullptr) {
-            return Result<Recipe, MutationError>::failure(
-                make_error(MutationErrorCode::unknown_node, "mutation encountered an unknown node type"));
-        }
-        for (auto& assignment : node.parameters) {
-            const ParameterSpec* spec = find_parameter_spec(*metadata, assignment.name);
-            if (spec == nullptr) {
+    // The first attempt is byte-for-byte compatible with the original AM-005
+    // operator for every seed that already produced a valid child. Only a
+    // validator-rejected candidate advances into the bounded retry sequence.
+    // This preserves all previously successful replay identities while making
+    // dependent parameter constraints (for example quantize minimum < maximum)
+    // safe for browsing and Quarry enumeration.
+    for (std::size_t attempt = 0U; attempt < kMutationAttemptLimit; ++attempt) {
+        Recipe child = parent;
+        const u64 root = attempt == 0U
+            ? base_root
+            : derive_seed(
+                  base_root,
+                  kMutationRetryDomain ^ splitmix64(static_cast<u64>(attempt)));
+
+        for (auto& node : child.nodes) {
+            const NodeMetadata* metadata = registry.find(node.type_id);
+            if (metadata == nullptr) {
                 return Result<Recipe, MutationError>::failure(
-                    make_error(MutationErrorCode::unknown_parameter, "mutation encountered an unknown parameter"));
+                    make_error(MutationErrorCode::unknown_node, "mutation encountered an unknown node type"));
             }
-            if (!value_matches_kind(assignment.value, spec->kind) || locks.locked(node.id, *spec) ||
-                !spec->mutation.mutable_parameter || spec->mutation.scale == MutationScale::none) {
-                continue;
-            }
+            for (auto& assignment : node.parameters) {
+                const ParameterSpec* spec = find_parameter_spec(*metadata, assignment.name);
+                if (spec == nullptr) {
+                    return Result<Recipe, MutationError>::failure(
+                        make_error(MutationErrorCode::unknown_parameter, "mutation encountered an unknown parameter"));
+                }
+                if (!value_matches_kind(assignment.value, spec->kind) || locks.locked(node.id, *spec) ||
+                    !spec->mutation.mutable_parameter || spec->mutation.scale == MutationScale::none) {
+                    continue;
+                }
 
-            const std::string key = parameter_domain_key(node.id, assignment.name);
-            const u64 local_domain = fnv1a64(key) ^ kMutationSequenceDomain;
-            const u64 local_seed = derive_seed(root, local_domain);
-            const u64 sequence = derive_seed(root, splitmix64(local_domain));
-            Pcg32 rng(local_seed, sequence);
-            assignment.value = mutate_value(*spec, assignment.value, strength, rng);
+                const std::string key = parameter_domain_key(node.id, assignment.name);
+                const u64 local_domain = fnv1a64(key) ^ kMutationSequenceDomain;
+                const u64 local_seed = derive_seed(root, local_domain);
+                const u64 sequence = derive_seed(root, splitmix64(local_domain));
+                Pcg32 rng(local_seed, sequence);
+                assignment.value = mutate_value(*spec, assignment.value, strength, rng);
+            }
         }
+
+        auto child_errors = validate_recipe(child, registry);
+        if (!child_errors.empty()) {
+            last_child_errors = std::move(child_errors);
+            continue;
+        }
+
+        set_metadata(child, "artminer.mutation.kind", "parameter");
+        set_metadata(child, "artminer.mutation.parent", parent_fingerprint);
+        set_metadata(child, "artminer.mutation.seed", std::to_string(mutation_seed));
+        set_metadata(child, "artminer.mutation.operator", std::to_string(operator_version));
+        set_metadata(child, "artminer.mutation.strength", format_double(strength));
+        return Result<Recipe, MutationError>::success(std::move(child));
     }
 
-    const auto child_errors = validate_recipe(child, registry);
-    if (!child_errors.empty()) {
-        return Result<Recipe, MutationError>::failure(
-            make_error(MutationErrorCode::invalid_child, validation_summary(child_errors)));
-    }
-
-    set_metadata(child, "artminer.mutation.kind", "parameter");
-    set_metadata(child, "artminer.mutation.parent", parent_fingerprint);
-    set_metadata(child, "artminer.mutation.seed", std::to_string(mutation_seed));
-    set_metadata(child, "artminer.mutation.operator", std::to_string(operator_version));
-    set_metadata(child, "artminer.mutation.strength", format_double(strength));
-    return Result<Recipe, MutationError>::success(std::move(child));
+    return Result<Recipe, MutationError>::failure(make_error(
+        MutationErrorCode::invalid_child,
+        "parameter mutation exhausted " + std::to_string(kMutationAttemptLimit) +
+            " bounded deterministic validation attempts: " + validation_summary(last_child_errors)));
 }
 
 Result<Recipe, MutationError> make_seed_variant(

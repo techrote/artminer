@@ -39,6 +39,16 @@ namespace {
     return found == parameters.end() ? nullptr : &*found;
 }
 
+[[nodiscard]] const ParameterAssignment* find_assignment(
+    const NodeInstance& node,
+    const std::string_view name) noexcept {
+    const auto found = std::find_if(
+        node.parameters.begin(),
+        node.parameters.end(),
+        [name](const ParameterAssignment& assignment) { return assignment.name == name; });
+    return found == node.parameters.end() ? nullptr : &*found;
+}
+
 [[nodiscard]] ParameterKind parameter_kind(const ParameterValue& value) noexcept {
     if (std::holds_alternative<i64>(value)) {
         return ParameterKind::integer;
@@ -89,10 +99,54 @@ void add_error(
     errors.push_back(ValidationError{code, std::move(message)});
 }
 
+void validate_node_parameter_relations(
+    const NodeInstance& node,
+    std::vector<ValidationError>& errors) {
+    // Relational constraints that affect evaluator legality belong in recipe
+    // validation as well as evaluator preflight. A recipe accepted by the
+    // public validator must not fail later merely because two individually
+    // in-domain parameters form an illegal combination.
+    if (node.type_id == "core.scalar.quantize") {
+        const ParameterAssignment* minimum = find_assignment(node, "minimum");
+        const ParameterAssignment* maximum = find_assignment(node, "maximum");
+        if (minimum != nullptr && maximum != nullptr &&
+            std::holds_alternative<double>(minimum->value) &&
+            std::holds_alternative<double>(maximum->value)) {
+            const double minimum_value = std::get<double>(minimum->value);
+            const double maximum_value = std::get<double>(maximum->value);
+            if (std::isfinite(minimum_value) && std::isfinite(maximum_value) && maximum_value <= minimum_value) {
+                add_error(
+                    errors,
+                    ValidationErrorCode::parameter_out_of_domain,
+                    "node '" + node.id + "' quantize maximum must be greater than minimum");
+            }
+        }
+    }
+}
+
 }  // namespace
 
 std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeRegistry& registry) {
     std::vector<ValidationError> errors;
+
+    std::size_t parameter_count = 0U;
+    bool parameter_limit_exceeded = false;
+    for (const auto& node : recipe.nodes) {
+        if (node.parameters.size() > kMaximumRecipeParameters - (std::min)(parameter_count, kMaximumRecipeParameters)) {
+            parameter_limit_exceeded = true;
+            break;
+        }
+        parameter_count += node.parameters.size();
+    }
+    if (recipe.nodes.size() > kMaximumRecipeNodes || recipe.edges.size() > kMaximumRecipeEdges ||
+        recipe.outputs.size() > kMaximumRecipeOutputs || recipe.metadata.size() > kMaximumRecipeMetadata ||
+        parameter_limit_exceeded || parameter_count > kMaximumRecipeParameters) {
+        add_error(
+            errors,
+            ValidationErrorCode::resource_limit,
+            "recipe exceeds release graph limits (4096 nodes, 65536 parameters, 16384 edges, 1024 outputs, 4096 metadata records)");
+        return errors;
+    }
 
     if (recipe.schema_version != kRecipeSchemaVersion) {
         add_error(
@@ -189,6 +243,7 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
                     "node '" + node.id + "' is missing explicit parameter '" + spec.name + "'");
             }
         }
+        validate_node_parameter_relations(node, errors);
     }
 
     using EdgeKey = std::tuple<std::string, std::string, std::string, std::string>;
@@ -251,10 +306,6 @@ std::vector<ValidationError> validate_recipe(const Recipe& recipe, const NodeReg
                 "input port accepts only one edge: " + edge.to_node + "." + edge.to_port);
         }
 
-        // A state boundary deliberately breaks the same-tick dependency graph.
-        // Its `next` input belongs to tick N-1 when the boundary is observed at
-        // tick N. Every non-boundary edge remains a same-tick dependency, so an
-        // ordinary cycle is still rejected by the topological check below.
         if (to_metadata->state_class != NodeStateClass::state_boundary) {
             adjacency[from_index->second].push_back(to_index->second);
             ++indegree[to_index->second];

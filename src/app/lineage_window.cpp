@@ -6,8 +6,6 @@
 #include <cerrno>
 #include <cwchar>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <map>
 #include <optional>
 #include <string>
@@ -18,7 +16,9 @@
 #include "app/browser_window.hpp"
 #include "core/breeding.hpp"
 #include "core/graph.hpp"
+#include "core/local_text.hpp"
 #include "core/recipe.hpp"
+#include "core/version.hpp"
 #include "platform/windows/lineage_store.hpp"
 
 namespace artminer::app {
@@ -140,17 +140,12 @@ void set_status(State& state, const std::wstring_view text) {
 [[nodiscard]] std::optional<core::Recipe> load_recipe(
     const std::filesystem::path& path,
     std::wstring& error) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) {
-        error = L"Could not open recipe: " + path.wstring();
+    auto text = core::read_local_text_file(path);
+    if (text.is_error()) {
+        error = L"Recipe read rejected: " + path.wstring() + L" (" + widen_utf8(text.error().message) + L")";
         return std::nullopt;
     }
-    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-    if (!input.good() && !input.eof()) {
-        error = L"Failed while reading recipe: " + path.wstring();
-        return std::nullopt;
-    }
-    auto parsed = core::parse_recipe(text);
+    auto parsed = core::parse_recipe(text.value());
     if (parsed.is_error()) {
         error = L"Recipe parse error: " + widen_utf8(parsed.error().message);
         return std::nullopt;
@@ -532,10 +527,11 @@ int run_lineage_application(
 
     State state;
     state.workspace = workspace;
+    const std::wstring title = L"ArtMiner " + widen_utf8(core::kVersion) + L" — Breeding & Lineage";
     state.window = CreateWindowExW(
         0,
         kClassName,
-        L"ArtMiner — AM-008 Breeding & Lineage",
+        title.c_str(),
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT,
         CW_USEDEFAULT,

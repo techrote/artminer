@@ -1,62 +1,30 @@
 # ArtMiner
 
-ArtMiner is a standalone Windows-native procedural-art laboratory for exploring, searching, reproducing, and exporting deterministic visual systems.
+ArtMiner 1.0 is a standalone Windows-native procedural-art laboratory for exploring, mutating, breeding, searching, reproducing, inspecting, and exporting deterministic visual systems.
 
-The project is intentionally dependency-light and self-contained. It is not tied to any game, editor, browser, cloud service, or AI model.
+It is intentionally self-contained: C++20, Win32, D3D11/DXGI, Windows Imaging Component, CMake, and no third-party runtime installation. Canonical recipe meaning and canonical pixels come from the deterministic CPU evaluator; GPU preview is an explicitly noncanonical interactive acceleration/fallback surface.
 
-## Concept
+## v1 capability map
 
-ArtMiner treats procedural art as a space to **prospect**:
+AM-001 through AM-015 are implemented. The delivered v1 includes:
 
-- generate related deterministic specimens;
-- select interesting results;
-- lock dimensions that are already right;
-- mutate the rest;
-- cross compatible parents;
-- run large reproducible **Quarry** searches using transparent image/animation metrics;
-- explore neighbourhoods around discoveries;
-- export useful images, textures, sprite sheets, LUTs/palettes, masks, glyph/ANSI output, and compact recipes with provenance.
+- versioned `.amr` recipes, typed graphs, explicit semantic versions, deterministic fingerprints, and model-owned seeded PRNG streams;
+- canonical static procedural fields/noise/SDF/palette/dither/image rendering plus D3D11 interactive preview with honest CPU fallback;
+- a native deterministic 4×4 specimen browser with parameter mutation, seed-only variants, locks, editing, history, favourites, and progressive bounded thumbnail workers;
+- fixed-tick reaction-diffusion, cellular automata, walkers/deposition, stable-ID branching, particles, explicit feedback/history and palette cycling;
+- deterministic two-parent breeding, durable lineage records, ancestry browsing and semantic/provenance recipe diffing;
+- transactional PNG/BMP/raw RGBA, frame sequences, sprite sheets/atlases, palettes/CSV/conservative `.cube` LUT export with deterministic provenance;
+- bounded Quarry batch jobs, metrics, checkpoint/resume, disposable caches, dedupe, clustering, unusual-distance ranking and neighbourhood exploration;
+- structural glyph/ANSI synthesis and exact terminal-text export;
+- seamless material diagnostics, height/mask/normal workflows and validated analytic loops;
+- deterministic type-safe topology mutation with structural locks, provenance and bounded topology search;
+- release hardening: bounded UTF-8/local-input handling, graph/resource limits, session recovery, coherent 1.0.0 metadata, representative benchmarks, clean portable packaging and packaged smoke tests.
 
-Every useful result should remain traceable to the recipe and deterministic state that created it.
+Read [`RAG.md`](RAG.md) for the product/architecture contract and [`AGENTS.md`](AGENTS.md) before autonomous implementation work. The AM-015 release audit, limits, recovery semantics, performance methodology and packaging contract are in [`docs/release-readiness.md`](docs/release-readiness.md).
 
-## Current state
+## Build, test, run
 
-AM-001 established the native deterministic foundation, AM-002 established the versioned `.amr` recipe/typed-graph substrate, AM-003 added the canonical CPU/reference renderer and deterministic PNG/provenance export, AM-004 added the first interactive native D3D11/DXGI preview while keeping the AM-003 CPU evaluator normative, AM-005 added the primary 4×4 specimen-browsing loop, AM-006 added deterministic fixed-tick growth families, and AM-007 added stable-ID particle motion, explicit previous-state feedback, palette cycling, exact frame seeking/ranges, disposable frame snapshots, and a responsive native playback inspector. AM-008 adds deterministic ordered two-parent breeding, durable replayable ancestry records, stable semantic/provenance recipe diffing, and a native lineage-neighbourhood browser.
-
-The AM-003 reference node set covers normalized coordinates, radial/angular fields, deterministic value/gradient/Worley/fBm noise, scalar domain warp, basic SDF composition, threshold/quantisation, repeat/symmetry transforms, palette mapping, channel/luminance extraction, ordered dithering, and final RGBA8 image composition. AM-006 growth nodes produce `ScalarField` values that compose with the same downstream palette/transform/image graph. AM-007 introduces a first-class `ParticleSet`, scalar/image trail deposition, deterministic image blending/history, and tick-driven palette cycling. PNG export uses Windows Imaging Component and writes deterministic adjacent provenance.
-
-The AM-004 preview accelerates an explicitly supported pointwise subset with generated HLSL. Recipes containing unsupported GPU operations remain interactive by falling back clearly to the unchanged canonical CPU evaluator and uploading that exact result for D3D11 presentation; unsupported nodes are never silently approximated. AM-005 reuses that preview for the currently selected specimen while rendering grid thumbnails progressively through the canonical CPU path. AM-006 intentionally advertises CPU-only canonical support for growth nodes. AM-007 animation has its own canonical CPU fixed-tick execution surface and dedicated worker-backed playback inspector rather than pretending that display refresh is simulation time.
-
-AM-005 mutation is driven by `NodeMetadata`: declared domains, integer/enumerated discreteness, logarithmic and periodic scales, mutability, and logical groups are authoritative. Per-parameter deterministic streams are derived from stable node/parameter identity, so serialization/traversal order does not alter the child. Generation returns 16 stable row-major recipe identities before thumbnail completion; workers may finish visually out of order without changing slot identity. AM-006 uses that same metadata contract; each growth node's explicit `tick` is semantic but deliberately excluded from automatic mutation. AM-007 motion rules are also metadata-declared, while the requested observation tick is deliberately an execution coordinate separate from the recipe fingerprint. AM-008 crossover likewise consumes metadata-declared mutability/groups and parameter/group locks; it crosses only compatible shared topology and rejects unsupported structural conflicts rather than inventing repair semantics.
-
-Read [`RAG.md`](RAG.md) for the authoritative architecture, product contract, reviewed implementation plan, and milestone sequence. Read [`AGENTS.md`](AGENTS.md) before autonomous implementation work. The `.amr` grammar and compatibility rules are documented in [`docs/recipe-format.md`](docs/recipe-format.md); canonical raster/evaluator semantics in [`docs/static-evaluator.md`](docs/static-evaluator.md); D3D11 preview semantics in [`docs/gpu-preview.md`](docs/gpu-preview.md); specimen mutation/history/persistence in [`docs/specimen-browser.md`](docs/specimen-browser.md); fixed-tick growth in [`docs/growth-systems.md`](docs/growth-systems.md); AM-007 motion, feedback, playback, snapshots, and headless frame seeking in [`docs/motion-feedback.md`](docs/motion-feedback.md); and AM-008 crossover, durable ancestry, replay, persistence, and recipe diff in [`docs/breeding-lineage.md`](docs/breeding-lineage.md).
-
-## Target stack
-
-- C++20
-- Windows 10/11 x64
-- Win32
-- Direct3D 11 / DXGI
-- Windows SDK D3D shader compiler facilities
-- Direct2D / DirectWrite where useful for later native UI
-- Windows Imaging Component
-- CMake for developer/CI builds
-
-The shipped application must have no third-party runtime installation requirement. The native targets use Windows platform facilities and statically link the MSVC C/C++ runtime.
-
-## Developer prerequisites
-
-For the baseline MSVC workflow:
-
-- Windows 10/11 x64;
-- Visual Studio 2022 or Visual Studio Build Tools with **Desktop development with C++** / the Windows SDK;
-- CMake 3.24 or newer available on `PATH`.
-
-No project package manager or runtime dependency install is required.
-
-## Build, test, and run
-
-From Explorer or a Windows terminal, the shortest paths are:
+Developer prerequisites are Windows 10/11 x64, Visual Studio 2022 or Build Tools with Desktop C++/Windows SDK, and CMake 3.24+ on `PATH`.
 
 ```bat
 scripts\0Build.cmd
@@ -64,9 +32,7 @@ scripts\0Test.cmd
 scripts\0Run.cmd
 ```
 
-The scripts configure an x64 build under `build\`, compile the Release targets, run CTest, or launch `build\Release\ArtMiner.exe` respectively. Arguments supplied to `0Run.cmd` are forwarded to the executable.
-
-Equivalent manual commands are:
+Equivalent manual commands:
 
 ```bat
 cmake -S . -B build -A x64
@@ -74,7 +40,21 @@ cmake --build build --config Release --parallel
 ctest --test-dir build -C Release --output-on-failure
 ```
 
-Useful command-line paths:
+The Release target statically links the MSVC runtime. No project package manager or third-party runtime install is required.
+
+## Portable release package
+
+After a successful Release build:
+
+```bat
+scripts\0Package.cmd
+```
+
+This stages and smoke-tests `dist\ArtMiner-1.0.0-win-x64\`, then creates `dist\ArtMiner-1.0.0-win-x64.zip`. The script tests the exact staged executable before archiving. CI runs the same package path and publishes the ZIP as a workflow artifact.
+
+The project licence remains an explicit unresolved repository decision; AM-015 does not invent one.
+
+## Core commands
 
 ```bat
 build\Release\ArtMiner.exe --version
@@ -85,80 +65,70 @@ build\Release\ArtMiner.exe --open examples\am006-reaction-diffusion.amr
 build\Release\ArtMiner.exe recipe validate examples\am002-minimal.amr
 build\Release\ArtMiner.exe recipe inspect examples\am007-feedback-trails.amr
 build\Release\ArtMiner.exe render examples\am003-fbm-warp.amr output\fbm-warp.png
-build\Release\ArtMiner.exe render examples\am006-reaction-diffusion.amr output\reaction.png
 build\Release\ArtMiner.exe render-tick examples\am007-particle-flow.amr 120 output\flow-120.png
 build\Release\ArtMiner.exe render-range examples\am007-particle-flow.amr 0 120 output\flow-frames
 build\Release\ArtMiner.exe animate examples\am007-feedback-trails.amr
 build\Release\ArtMiner.exe lineage
-build\Release\ArtMiner.exe lineage examples\am003-fbm-warp.amr examples\am003-fbm-warp.amr
+build\Release\ArtMiner.exe export ui examples\am003-fbm-warp.amr
+build\Release\ArtMiner.exe material seam examples\am013-seamless-texture.amr main 0.000001
+build\Release\ArtMiner.exe material loop examples\am013-validated-loop.amr 32 main 0.000001
 ```
 
-Recipe and render commands are headless and do not require the specimen-browser workspace. `recipe validate` prints the semantic fingerprint; `recipe inspect` also prints schema/evaluator version, seed, render settings, and graph counts. `render` evaluates output `main` through the AM-003/AM-006 canonical CPU path. `render-tick` evaluates one explicit AM-007 fixed tick and `render-range` writes an inclusive range of at most 256 frames using zero-padded `tick-XXXXXXXXXX.png` names. Each PNG receives deterministic adjacent provenance; AM-007 sidecars include non-semantic `render.tick` metadata identifying the requested observation tick.
+`--version` reports the product version and the coherent recipe/evaluator/exporter/mutation/Quarry semantic-version matrix. Headless recipe/render/export/material/Quarry commands use the same validated recipe semantics as the UI.
 
-AM-003 example families are available under `examples/am003-fbm-warp.amr`, `examples/am003-worley.amr`, `examples/am003-sdf.amr`, and `examples/am003-angular-repeat.amr`. AM-006 adds `examples/am006-reaction-diffusion.amr`, `examples/am006-cellular-automaton.amr`, `examples/am006-walkers.amr`, and `examples/am006-branching.amr`. AM-007 adds `examples/am007-particle-flow.amr`, `examples/am007-particle-orbit.amr`, `examples/am007-feedback-trails.amr`, and `examples/am007-palette-cycle.amr`.
+## Native browser
 
-With no headless command, ArtMiner validates its workspace and opens the 4×4 native specimen browser. Use **File → Open Recipe…**, **Ctrl+O**, or `--open <file.amr>` to establish a parent. `M` generates parameter mutations, `N` generates seed-only variants, arrows move the active grid slot, `Enter` selects that recipe as the current parent, `F` toggles favourite status, `Alt+Left/Right` navigates recipe history, `Ctrl+S` saves a selected recipe copy, and `Ctrl+Shift+F` advances through persisted favourites. The seed and mutation strength controls are explicit and reproducible. The parameter panel supports validated edits plus individual and logical-group mutation locks.
+With no headless command, ArtMiner opens the 4×4 specimen browser. Use **File → Open Recipe…**, `Ctrl+O`, or `--open <file.amr>` to establish a parent. `M` generates deterministic parameter mutations, `N` seed-only variants, arrows select a slot, `Enter` adopts it, `F` toggles favourite status, `Alt+Left/Right` navigates history, `Ctrl+S` saves a copy, and `Ctrl+Shift+F` advances through persisted favourites.
 
-For an AM-006 growth recipe, the same parameter panel exposes the node's explicit fixed `tick`. Set a non-negative tick and Apply to reconstruct that simulation state; set it back to `0` to reset. Tick edits are normal semantic recipe edits and participate in history/save/fingerprinting. Display refresh cadence and thumbnail completion timing are never simulation time.
+The parameter panel provides validated edits plus individual/logical-group locks. Growth recipes expose their explicit fixed tick as ordinary semantic state. Animation playback uses a dedicated worker: requested integer tick is authoritative; display refresh speed is not simulation time.
 
-For AM-007 animation, use `ArtMiner animate <recipe.amr>`. The native inspector exposes Play/Pause, single Step, Reset, integer tick position, and a `1..60` tick/s speed slider. Space toggles playback, Right Arrow steps, and `R` resets. Canonical rendering runs on a dedicated worker thread and keeps only the newest pending tick, so UI input remains responsive even if rendering falls behind. Visual frames may be skipped, but the renderer reconstructs the requested final tick exactly; changing preview speed changes wall-clock progression only, never the state at a given tick.
+The selected specimen uses D3D11 preview where the graph is explicitly supported. Unsupported preview graphs fall back to the unchanged canonical CPU evaluator and upload that exact image for presentation; ArtMiner never silently changes graph meaning to keep a preview fast.
 
-For AM-008 breeding and ancestry, use `ArtMiner lineage` or preload ordered Parent A/B recipe paths on the command line. The native window loads ordered parents, accepts an explicit 64-bit crossover seed, breeds a deterministic compatible-topology child, shows a stable semantic/provenance diff between the active parents, and lists the current specimen's stored parent/child neighbourhood. Double-click or **Use as A** navigates to an available stored specimen; **Open Browser** returns it to the normal 4×4 browser. Missing parent snapshots are shown as provenance gaps rather than invalidating a child. Successful breeding atomically persists parent/child snapshots plus a versioned `.aml` operation record before the child becomes Parent A.
+## Portable workspace and recovery
 
-The selected specimen uses the AM-004 preview path: supported pointwise graphs use GPU preview and unsupported graphs use explicit canonical CPU fallback. Window/layout changes, thumbnail completion timing, history navigation and lock toggles do not change recipe semantics unless an explicit recipe edit/mutation is performed.
-
-By default the workspace root is the directory containing `ArtMiner.exe`; an explicit `--workspace` path replaces it. ArtMiner does not silently fall back to the registry or an unrelated profile directory if that location is unwritable. The `lineage` command currently uses the executable-relative portable workspace.
-
-The portable workspace contains/creates:
+By default the workspace is the directory containing `ArtMiner.exe`; `--workspace` replaces it explicitly. ArtMiner does not silently redirect an unwritable workspace into the registry or user profile.
 
 ```text
 <workspace>/
 ├── recipes/
-│   ├── saved/                 # created on first explicit save
-│   ├── favourites/            # created on first favourite
-│   └── lineage/               # created on first durable ancestry write
-│       ├── records/           # <child-fingerprint>.aml replay records
-│       └── specimens/         # <semantic-fingerprint>.amr snapshots
+│   ├── saved/
+│   ├── favourites/
+│   ├── recovery/current.amr
+│   └── lineage/
+│       ├── records/
+│       └── specimens/
 ├── palettes/
 ├── output/
 └── cache/
 ```
 
-Saved/favourite/lineage specimen filenames use the semantic recipe fingerprint. Recipe and lineage writes use same-directory temporary files and atomic Windows replacement. Favourites are validated and reloaded on the next normal application start; UI-only history is intentionally not persisted into recipe semantics. Lineage records are provenance keyed by child fingerprint and remain meaningful even when a referenced historical parent snapshot is no longer present.
+The selected browser recipe is atomically snapshotted to `recipes/recovery/current.amr`. On normal startup without `--open`, a valid recovery snapshot is preferred, then a persisted favourite. Corrupt recovery is reported and ignored rather than guessed. Favourites and lineage snapshots/records use atomic same-directory replacement. Cache content is disposable derived state and never authoritative.
 
-## Recipe and graph baseline
+## Release input/resource contract
 
-Schema/evaluator version 1 currently fixes these semantic contracts:
+Local recipe files are bounded and validated before allocation: maximum 8 MiB, maximum 64 KiB per source line, strict UTF-8, no raw NUL. Schema/evaluator/node versions are explicit and unsupported versions fail rather than being reinterpreted. v1 also imposes outer limits of 4,096 nodes, 65,536 parameters, 16,384 edges, 1,024 outputs and 4,096 metadata records; render dimensions remain checked and bounded.
 
-- stable node type IDs plus per-node semantic versions;
-- typed graph data kinds: `ScalarField`, `VectorField`, `ColourField`, `Mask`, `ParticleSet`, `Palette`, and `Image`;
-- node-owned port, parameter-domain, mutation, state-classification, and evaluator-capability metadata;
-- all parameters explicit in a recipe rather than silently inheriting defaults;
-- ordinary same-tick graph cycles rejected; feedback is legal only through an explicit `state_boundary`, whose input is evaluated at the previous tick;
-- canonical ordering independent of source node/edge/output order;
-- a 128-bit textual semantic fingerprint made from two domain-separated FNV-1a 64-bit hashes of canonical semantic recipe text;
-- `meta` records explicitly non-semantic and excluded from the semantic fingerprint;
-- canonical static images are tightly packed row-major RGBA8 with straight alpha; pixel/raster and floating semantics are specified in `docs/static-evaluator.md`.
+Export stems are restricted portable tokens and cannot be path traversal. Export publication is transactional and existing completed destinations are not silently overwritten. Quarry checkpoints/caches remain bounded, identity/checksum validated, and cache corruption cannot become authoritative state. Full details are in `docs/release-readiness.md`.
 
-The recipe fingerprint and image hash are deterministic identity/checking mechanisms, not cryptographic integrity primitives. Any future change that alters established recipe/evaluator meaning must use schema/evaluator/node versioning rather than silently changing existing semantics.
+## Determinism and versioning
 
-## Determinism baseline
+Recipe schema/evaluator version 1 fixes stable node type IDs, typed data kinds, explicit parameter metadata, ordinary-cycle rejection, explicit previous-state boundaries, canonical ordering, deterministic recipe fingerprints and canonical RGBA8 output semantics. Changes that alter established meaning must advance an applicable schema/evaluator/node/operator version instead of silently changing v1 behaviour.
 
-AM-001 fixed the low-level deterministic contracts and protects them with committed reference vectors:
+Static/random systems derive local streams from root seed plus stable identities rather than shared RNG traversal order. Fixed-tick growth/motion reconstructs tick `N` from deterministic state transitions. Breeding and topology mutation derive their choices from explicit parent identity, seed/operator versions, locks and canonical metadata. Worker ordering, wall-clock time, pointer identity, file serialization order and disposable caches are not allowed to change canonical results.
 
-- SplitMix64 as the seed-mixing transform;
-- `derive_seed(root_seed, domain) = splitmix64(root_seed ^ splitmix64(domain))`;
-- PCG32 (XSH-RR 64/32) for model-owned random streams;
-- FNV-1a 64-bit as the initial stable non-cryptographic hashing primitive.
+## Documentation
 
-AM-003 static noise nodes derive local seeds from the recipe root seed and stable node identity instead of consuming shared RNG state. Canonical evaluation therefore does not depend on graph traversal order, worker scheduling, wall-clock time, locale, or pointer identity.
+Key subsystem documents include:
 
-AM-004 preserves that contract: GPU preview is explicitly non-canonical where floating point can differ, WARP-backed equivalence tests compare supported preview graphs against the CPU oracle within documented tolerances, and canonical fallback returns the CPU reference image rather than changing graph meaning.
-
-AM-005 extends the deterministic contract to visual browsing. A mutation is identified by parent semantic fingerprint, explicit mutation seed, operator version and strength; each parameter gets a stable local PRNG stream. Seed-only variation is a separate operation. Grid candidate enumeration is independent of worker scheduling, and history/favourite UI state cannot silently alter semantic recipe identity.
-
-AM-006 extends deterministic state into fixed-tick growth. Each self-contained growth node reconstructs tick `N` from its seeded initial state and exactly `N` ordered updates. Grid systems commit synchronously; walkers use stable agent order and keyed `(tick, walker)` decisions; branching uses stable tip IDs and activates children only on the following tick. Work is rejected under explicit checked limits before an excessive simulation loop. See `docs/growth-systems.md` for the normative AM-006 details.
-
-AM-007 extends fixed-tick determinism across graph feedback and motion. `ParticleSet` order is stable by ID; per-particle stochastic turns are keyed by tick and ID rather than a shared random stream; image history crosses only an explicit previous-state boundary; palette cycling derives solely from the requested tick; and Play/Step/speed are UI mechanisms for selecting an integer tick, not alternate simulation paths. `FrameSnapshotCache` keys include evaluator marker, semantic fingerprint, output, and tick, and clearing the cache cannot change pixels. See `docs/motion-feedback.md` for the normative contract and resource bounds.
-
-AM-008 extends determinism to breeding and ancestry. A crossover is identified by ordered Parent A/B semantic fingerprints, explicit crossover seed, operator version, and canonical lock state. Grouped mutable parameters inherit together from one deterministic parent role; locked or immutable parameters remain from Parent A; topology is unchanged and incompatibility is rejected. Durable `.aml` records carry enough information to replay crossover, seed-only variation, or a parameter mutation including its strength and locks when the referenced parent recipes are available. Lineage metadata and external records are deliberately non-semantic: deleting them cannot change a recipe fingerprint or rendered pixels. See `docs/breeding-lineage.md` for the full contract.
+- [`docs/recipe-format.md`](docs/recipe-format.md) — `.amr` grammar and compatibility;
+- [`docs/static-evaluator.md`](docs/static-evaluator.md) — canonical raster/evaluator semantics;
+- [`docs/gpu-preview.md`](docs/gpu-preview.md) — supported D3D11 preview and fallback;
+- [`docs/specimen-browser.md`](docs/specimen-browser.md) — mutation/history/persistence;
+- [`docs/growth-systems.md`](docs/growth-systems.md) — fixed-tick growth;
+- [`docs/motion-feedback.md`](docs/motion-feedback.md) — particles, feedback, playback and snapshots;
+- [`docs/breeding-lineage.md`](docs/breeding-lineage.md) — crossover, lineage and diff;
+- [`docs/quarry.md`](docs/quarry.md) and [`docs/quarry-diversity.md`](docs/quarry-diversity.md) — deterministic batch/search and diversity semantics;
+- [`docs/glyph-terminal.md`](docs/glyph-terminal.md) — glyph/ANSI mapping/export;
+- [`docs/am013-material-workflows.md`](docs/am013-material-workflows.md) — material outputs, seams and loops;
+- [`docs/am014-topology-mutation.md`](docs/am014-topology-mutation.md) — deterministic structural mutation;
+- [`docs/release-readiness.md`](docs/release-readiness.md) — AM-015 v1 audit, hard limits, recovery, packaging and benchmark method.

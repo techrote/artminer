@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -12,11 +13,14 @@
 
 namespace artminer::platform::windows {
 
+inline constexpr std::size_t kMaximumPersistedLineageEntries = 4096U;
+
 enum class LineageStoreErrorCode {
     directory_creation_failed,
     write_failed,
     replace_failed,
     read_failed,
+    resource_limit,
     invalid_record,
     invalid_recipe,
     not_found,
