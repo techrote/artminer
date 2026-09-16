@@ -4,6 +4,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/glyph_nodes.hpp"
+
 namespace artminer::core {
 namespace {
 
@@ -230,6 +232,11 @@ void append_growth_node_metadata(std::vector<NodeMetadata>& nodes) {
         NodeStateClass::state_boundary,
         cpu_reference,
     });
+
+    // AM-012 owns a disconnected semantic settings node for the terminal output
+    // stage. Register it with the built-in catalog here so all existing graph,
+    // mutation and breeding callers automatically share the same metadata source.
+    append_glyph_node_metadata(nodes);
 }
 
 }  // namespace artminer::core
