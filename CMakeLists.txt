@@ -28,6 +28,7 @@ function(artminer_apply_warnings target_name)
             /permissive-
             /Zc:__cplusplus
             /utf-8
+            /fp:precise
             $<$<BOOL:${ARTMINER_WARNINGS_AS_ERRORS}>:/WX>
         )
     else()
@@ -50,6 +51,13 @@ add_library(artminer_core STATIC
 target_include_directories(artminer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 artminer_apply_warnings(artminer_core)
 
+add_library(artminer_nodes STATIC
+    src/nodes/static_evaluator.cpp
+)
+target_include_directories(artminer_nodes PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(artminer_nodes PUBLIC artminer_core)
+artminer_apply_warnings(artminer_nodes)
+
 add_library(artminer_platform_windows STATIC
     src/platform/windows/portable_workspace.cpp
 )
@@ -58,12 +66,22 @@ target_link_libraries(artminer_platform_windows PUBLIC artminer_core)
 target_compile_definitions(artminer_platform_windows PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(artminer_platform_windows)
 
+add_library(artminer_export_windows STATIC
+    src/export/windows/wic_png.cpp
+)
+target_include_directories(artminer_export_windows PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(artminer_export_windows PUBLIC artminer_core artminer_nodes windowscodecs ole32)
+target_compile_definitions(artminer_export_windows PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(artminer_export_windows)
+
 add_executable(ArtMiner
     src/app/main.cpp
 )
 target_link_libraries(ArtMiner PRIVATE
     artminer_core
+    artminer_nodes
     artminer_platform_windows
+    artminer_export_windows
     user32
     gdi32
 )
@@ -73,8 +91,13 @@ artminer_apply_warnings(ArtMiner)
 add_executable(ArtMinerTests
     tests/test_main.cpp
 )
-target_link_libraries(ArtMinerTests PRIVATE artminer_core artminer_platform_windows)
-target_compile_definitions(ArtMinerTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(ArtMinerTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_platform_windows
+    artminer_export_windows
+)
+target_compile_definitions(ArtMinerTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerTests)
 
 enable_testing()
@@ -89,3 +112,7 @@ add_test(NAME artminer.recipe.validate COMMAND ArtMiner recipe validate "${CMAKE
 set_tests_properties(artminer.recipe.validate PROPERTIES PASS_REGULAR_EXPRESSION "valid b9aed1288926e59c8c40115733cd32bf")
 add_test(NAME artminer.recipe.inspect COMMAND ArtMiner recipe inspect "${CMAKE_CURRENT_SOURCE_DIR}/examples/am002-minimal.amr")
 set_tests_properties(artminer.recipe.inspect PROPERTIES PASS_REGULAR_EXPRESSION "fingerprint: b9aed1288926e59c8c40115733cd32bf")
+add_test(
+    NAME artminer.render.reference
+    COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am003-fbm-warp.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am003-fbm-warp.png")
+set_tests_properties(artminer.render.reference PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
