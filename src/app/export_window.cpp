@@ -2,7 +2,9 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <cerrno>
+#include <cstddef>
 #include <cwchar>
 #include <filesystem>
 #include <optional>
@@ -25,6 +27,13 @@ struct AppState final {
     core::Recipe recipe;
     std::filesystem::path output_parent;
     HWND window{nullptr};
+    HWND kind_label{nullptr};
+    HWND format_label{nullptr};
+    HWND tick_label{nullptr};
+    HWND end_label{nullptr};
+    HWND columns_label{nullptr};
+    HWND palette_label{nullptr};
+    HWND destination_label{nullptr};
     HWND kind_combo{nullptr};
     HWND format_combo{nullptr};
     HWND tick_edit{nullptr};
@@ -41,23 +50,13 @@ struct AppState final {
         return {};
     }
     const int length = MultiByteToWideChar(
-        CP_UTF8,
-        MB_ERR_INVALID_CHARS,
-        text.data(),
-        static_cast<int>(text.size()),
-        nullptr,
-        0);
+        CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
     if (length <= 0) {
         return L"<invalid UTF-8>";
     }
     std::wstring result(static_cast<std::size_t>(length), L'\0');
     (void)MultiByteToWideChar(
-        CP_UTF8,
-        MB_ERR_INVALID_CHARS,
-        text.data(),
-        static_cast<int>(text.size()),
-        result.data(),
-        length);
+        CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), length);
     return result;
 }
 
@@ -66,27 +65,13 @@ struct AppState final {
         return {};
     }
     const int length = WideCharToMultiByte(
-        CP_UTF8,
-        WC_ERR_INVALID_CHARS,
-        text.data(),
-        static_cast<int>(text.size()),
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
+        CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
     if (length <= 0) {
         return {};
     }
     std::string result(static_cast<std::size_t>(length), '\0');
     (void)WideCharToMultiByte(
-        CP_UTF8,
-        WC_ERR_INVALID_CHARS,
-        text.data(),
-        static_cast<int>(text.size()),
-        result.data(),
-        length,
-        nullptr,
-        nullptr);
+        CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), length, nullptr, nullptr);
     return result;
 }
 
@@ -126,18 +111,9 @@ struct AppState final {
     const UINT id,
     HINSTANCE instance) {
     HWND control = CreateWindowExW(
-        0U,
-        class_name,
-        text,
-        WS_CHILD | WS_VISIBLE | style,
-        0,
-        0,
-        1,
-        1,
-        parent,
-        reinterpret_cast<HMENU>(static_cast<UINT_PTR>(id)),
-        instance,
-        nullptr);
+        0U, class_name, text, WS_CHILD | WS_VISIBLE | style,
+        0, 0, 1, 1, parent,
+        reinterpret_cast<HMENU>(static_cast<UINT_PTR>(id)), instance, nullptr);
     if (control != nullptr) {
         SendMessageW(control, WM_SETFONT, reinterpret_cast<WPARAM>(GetStockObject(DEFAULT_GUI_FONT)), TRUE);
     }
@@ -149,6 +125,13 @@ void add_combo_item(HWND combo, const wchar_t* text) {
 }
 
 [[nodiscard]] bool create_controls(AppState& state, HINSTANCE instance) {
+    state.kind_label = create_control(L"STATIC", L"Kind", SS_LEFT, state.window, 0U, instance);
+    state.format_label = create_control(L"STATIC", L"Format", SS_LEFT, state.window, 0U, instance);
+    state.tick_label = create_control(L"STATIC", L"Tick / start tick", SS_LEFT, state.window, 0U, instance);
+    state.end_label = create_control(L"STATIC", L"End tick", SS_LEFT, state.window, 0U, instance);
+    state.columns_label = create_control(L"STATIC", L"Sheet columns", SS_LEFT, state.window, 0U, instance);
+    state.palette_label = create_control(L"STATIC", L"Palette node ID", SS_LEFT, state.window, 0U, instance);
+    state.destination_label = create_control(L"STATIC", L"Destination folder", SS_LEFT, state.window, 0U, instance);
     state.kind_combo = create_control(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, state.window, kKindComboId, instance);
     state.format_combo = create_control(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_TABSTOP, state.window, kFormatComboId, instance);
     state.tick_edit = create_control(L"EDIT", L"0", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, state.window, 0U, instance);
@@ -157,10 +140,15 @@ void add_combo_item(HWND combo, const wchar_t* text) {
     state.palette_edit = create_control(L"EDIT", L"palette", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, state.window, 0U, instance);
     state.destination_edit = create_control(L"EDIT", L"", ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP, state.window, 0U, instance);
     state.export_button = create_control(L"BUTTON", L"Export", BS_DEFPUSHBUTTON | WS_TABSTOP, state.window, kCommandExport, instance);
-    state.status_label = create_control(L"STATIC", L"Ready. Existing destinations are never overwritten.", SS_LEFT, state.window, 0U, instance);
-    if (state.kind_combo == nullptr || state.format_combo == nullptr || state.tick_edit == nullptr ||
-        state.end_edit == nullptr || state.columns_edit == nullptr || state.palette_edit == nullptr ||
-        state.destination_edit == nullptr || state.export_button == nullptr || state.status_label == nullptr) {
+    state.status_label = create_control(
+        L"STATIC", L"Ready. Existing destinations are never overwritten.", SS_LEFT, state.window, 0U, instance);
+
+    if (state.kind_label == nullptr || state.format_label == nullptr || state.tick_label == nullptr ||
+        state.end_label == nullptr || state.columns_label == nullptr || state.palette_label == nullptr ||
+        state.destination_label == nullptr || state.kind_combo == nullptr || state.format_combo == nullptr ||
+        state.tick_edit == nullptr || state.end_edit == nullptr || state.columns_edit == nullptr ||
+        state.palette_edit == nullptr || state.destination_edit == nullptr || state.export_button == nullptr ||
+        state.status_label == nullptr) {
         return false;
     }
 
@@ -192,27 +180,21 @@ void layout_controls(AppState& state, const int width, const int height) {
     const int control_width = (std::max)(180, width - control_x - kGap);
     int y = kGap;
 
-    const auto place = [&](const wchar_t* label, HWND control, const int control_height = 26) mutable {
-        RECT label_rect{kGap, y + 4, kGap + label_width - kGap, y + 24};
-        HDC dc = GetDC(state.window);
-        SetBkMode(dc, TRANSPARENT);
-        (void)DrawTextW(dc, label, -1, &label_rect, DT_LEFT | DT_SINGLELINE);
-        ReleaseDC(state.window, dc);
-        MoveWindow(control, control_x, y, control_width, control_height, TRUE);
-        y += control_height + kGap;
+    const auto place = [&](HWND label, HWND control, const bool combo = false) mutable {
+        MoveWindow(label, kGap, y + 4, label_width - kGap, 22, TRUE);
+        MoveWindow(control, control_x, y, control_width, combo ? 180 : 26, TRUE);
+        y += 36;
     };
 
-    place(L"Kind", state.kind_combo, 160);
-    y -= 134;
-    place(L"Format", state.format_combo, 160);
-    y -= 134;
-    place(L"Tick / start tick", state.tick_edit);
-    place(L"End tick", state.end_edit);
-    place(L"Sheet columns", state.columns_edit);
-    place(L"Palette node ID", state.palette_edit);
-    place(L"Destination folder", state.destination_edit);
+    place(state.kind_label, state.kind_combo, true);
+    place(state.format_label, state.format_combo, true);
+    place(state.tick_label, state.tick_edit);
+    place(state.end_label, state.end_edit);
+    place(state.columns_label, state.columns_edit);
+    place(state.palette_label, state.palette_edit);
+    place(state.destination_label, state.destination_edit);
     MoveWindow(state.export_button, control_x, y, 120, 30, TRUE);
-    y += 40;
+    y += 42;
     MoveWindow(state.status_label, kGap, y, (std::max)(1, width - 2 * kGap), (std::max)(40, height - y - kGap), TRUE);
 }
 
@@ -238,9 +220,7 @@ void layout_controls(AppState& state, const int width, const int height) {
             return std::nullopt;
         }
     } else if (kind_index == 2 || kind_index == 3) {
-        request.kind = kind_index == 2
-            ? exporting::ExportKind::sequence
-            : exporting::ExportKind::sprite_sheet;
+        request.kind = kind_index == 2 ? exporting::ExportKind::sequence : exporting::ExportKind::sprite_sheet;
         const auto start = parse_u64(state.tick_edit);
         const auto end = parse_u64(state.end_edit);
         if (!start || !end) {
@@ -322,7 +302,6 @@ LRESULT CALLBACK window_proc(HWND window, const UINT message, const WPARAM w_par
     }
     case WM_SIZE:
         if (state != nullptr) {
-            InvalidateRect(window, nullptr, TRUE);
             layout_controls(*state, static_cast<int>(LOWORD(l_param)), static_cast<int>(HIWORD(l_param)));
         }
         return 0;
