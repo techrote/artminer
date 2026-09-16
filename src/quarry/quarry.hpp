@@ -11,6 +11,7 @@
 #include "core/recipe.hpp"
 #include "core/result.hpp"
 #include "core/specimen_browser.hpp"
+#include "core/topology_mutation.hpp"
 #include "core/types.hpp"
 #include "quarry/metrics.hpp"
 
@@ -47,6 +48,18 @@ struct JobManifest final {
     core::Recipe base_recipe;
     std::string base_recipe_fingerprint;
     std::string identity;
+};
+
+enum class CandidateMutationMode {
+    parameter,
+    topology,
+};
+
+struct CandidateGenerationSettings final {
+    CandidateMutationMode mode{CandidateMutationMode::parameter};
+    core::u32 topology_operator_version{core::kTopologyMutationOperatorVersion};
+    core::u32 topology_budget{4U};
+    core::StructuralLocks structural_locks;
 };
 
 struct CandidateResult final {
@@ -119,12 +132,24 @@ struct QuarryError final {
     const JobManifest& manifest);
 [[nodiscard]] core::Result<JobManifest, QuarryError> read_job_manifest(const std::filesystem::path& path);
 
-// Reconstructs the authoritative candidate recipe from the manifest and index
-// without rendering it. This is shared by evaluation and later diversity/search
-// stages so candidate identity cannot drift between subsystems.
+// Reconstructs the authoritative parameter-mutated candidate from the manifest
+// and index without rendering it. Existing AM-010 jobs retain these semantics.
 [[nodiscard]] core::Result<core::Recipe, QuarryError> reconstruct_candidate_recipe(
     const JobManifest& manifest,
     core::u64 candidate_index);
+
+// AM-014 opt-in candidate generation. Parameter mode is byte-for-byte the
+// existing enumerator; topology mode uses the same candidate seed domain but
+// feeds it into the versioned bounded topology operator with explicit budget
+// and structural locks. Its generation identity includes those settings.
+[[nodiscard]] core::Result<core::Recipe, QuarryError> reconstruct_candidate_recipe(
+    const JobManifest& manifest,
+    core::u64 candidate_index,
+    const CandidateGenerationSettings& settings);
+
+[[nodiscard]] std::string candidate_generation_identity(
+    const JobManifest& manifest,
+    const CandidateGenerationSettings& settings);
 
 [[nodiscard]] core::Result<CandidateResult, QuarryError> evaluate_candidate(
     const JobManifest& manifest,

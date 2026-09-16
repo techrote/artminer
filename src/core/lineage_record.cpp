@@ -23,6 +23,8 @@ namespace {
         return "seed";
     case LineageOperationKind::crossover:
         return "crossover";
+    case LineageOperationKind::topology_mutation:
+        return "topology";
     }
     return "unknown";
 }
@@ -103,7 +105,9 @@ LineageRecord make_crossover_lineage_record(
         operator_version,
         crossover_seed,
         std::nullopt,
-        locks.serialize_canonical()};
+        locks.serialize_canonical(),
+        std::nullopt,
+        {}};
 }
 
 LineageRecord make_parameter_mutation_lineage_record(
@@ -121,7 +125,9 @@ LineageRecord make_parameter_mutation_lineage_record(
         operator_version,
         mutation_seed,
         strength,
-        locks.serialize_canonical()};
+        locks.serialize_canonical(),
+        std::nullopt,
+        {}};
 }
 
 LineageRecord make_seed_variant_lineage_record(
@@ -137,7 +143,29 @@ LineageRecord make_seed_variant_lineage_record(
         operator_version,
         variation_seed,
         std::nullopt,
+        {},
+        std::nullopt,
         {}};
+}
+
+LineageRecord make_topology_mutation_lineage_record(
+    const Recipe& child,
+    const Recipe& parent,
+    const u64 topology_seed,
+    const u32 operator_version,
+    const double strength,
+    const u32 budget,
+    const StructuralLocks& locks) {
+    LineageRecord record;
+    record.kind = LineageOperationKind::topology_mutation;
+    record.child_fingerprint = semantic_fingerprint(child);
+    record.parent_a_fingerprint = semantic_fingerprint(parent);
+    record.operator_version = operator_version;
+    record.operation_seed = topology_seed;
+    record.mutation_strength = strength;
+    record.topology_budget = budget;
+    record.structural_locks = locks.serialize_canonical();
+    return record;
 }
 
 std::string serialize_lineage_record(const LineageRecord& record) {
@@ -154,7 +182,14 @@ std::string serialize_lineage_record(const LineageRecord& record) {
     if (record.mutation_strength.has_value()) {
         output << "strength " << format_real(*record.mutation_strength) << '\n';
     }
+    if (record.topology_budget.has_value()) {
+        output << "budget " << *record.topology_budget << '\n';
+    }
     output << "locks " << (record.locks.empty() ? "-" : record.locks) << '\n';
+    if (record.kind == LineageOperationKind::topology_mutation) {
+        output << "structural_locks " <<
+            (record.structural_locks.empty() ? "-" : record.structural_locks) << '\n';
+    }
     return output.str();
 }
 
@@ -191,13 +226,14 @@ Result<LineageRecord, LineageError> parse_lineage_record(const std::string_view 
         return Result<LineageRecord, LineageError>::failure(
             make_error(LineageErrorCode::malformed_lineage, "lineage format version is malformed"));
     }
-    if (format_version != kLineageFormatVersion) {
+    if (format_version != 1U && format_version != kLineageFormatVersion) {
         return Result<LineageRecord, LineageError>::failure(
             make_error(LineageErrorCode::unsupported_lineage_version, "unsupported lineage format version"));
     }
 
     static constexpr std::string_view known[] = {
-        "aml", "kind", "child", "parent_a", "parent_b", "operator", "seed", "strength", "locks"};
+        "aml", "kind", "child", "parent_a", "parent_b", "operator", "seed",
+        "strength", "budget", "locks", "structural_locks"};
     for (const auto& [key, value] : fields) {
         (void)value;
         bool recognized = false;
@@ -249,9 +285,10 @@ Result<LineageRecord, LineageError> parse_lineage_record(const std::string_view 
 
     if (kind->second == "crossover") {
         const auto parent_b = fields.find("parent_b");
-        if (parent_b == fields.end() || !fingerprint_token(parent_b->second) || fields.contains("strength")) {
+        if (parent_b == fields.end() || !fingerprint_token(parent_b->second) ||
+            fields.contains("strength") || fields.contains("budget") || fields.contains("structural_locks")) {
             return Result<LineageRecord, LineageError>::failure(
-                make_error(LineageErrorCode::malformed_lineage, "crossover lineage requires a valid parent_b fingerprint and no strength"));
+                make_error(LineageErrorCode::malformed_lineage, "crossover lineage requires a valid parent_b fingerprint and no mutation fields"));
         }
         record.kind = LineageOperationKind::crossover;
         record.parent_b_fingerprint = parent_b->second;
@@ -259,18 +296,50 @@ Result<LineageRecord, LineageError> parse_lineage_record(const std::string_view 
         const auto strength = fields.find("strength");
         double parsed_strength = 0.0;
         if (strength == fields.end() || !parse_real(strength->second, parsed_strength) ||
-            parsed_strength < 0.0 || parsed_strength > 1.0 || fields.contains("parent_b")) {
+            parsed_strength < 0.0 || parsed_strength > 1.0 || fields.contains("parent_b") ||
+            fields.contains("budget") || fields.contains("structural_locks")) {
             return Result<LineageRecord, LineageError>::failure(
                 make_error(LineageErrorCode::malformed_lineage, "parameter lineage requires strength in [0,1] and one parent"));
         }
         record.kind = LineageOperationKind::parameter_mutation;
         record.mutation_strength = parsed_strength;
     } else if (kind->second == "seed") {
-        if (fields.contains("parent_b") || fields.contains("strength") || !record.locks.empty()) {
+        if (fields.contains("parent_b") || fields.contains("strength") || fields.contains("budget") ||
+            fields.contains("structural_locks") || !record.locks.empty()) {
             return Result<LineageRecord, LineageError>::failure(
-                make_error(LineageErrorCode::malformed_lineage, "seed lineage accepts one parent and no locks/strength"));
+                make_error(LineageErrorCode::malformed_lineage, "seed lineage accepts one parent and no locks/mutation fields"));
         }
         record.kind = LineageOperationKind::seed_variant;
+    } else if (kind->second == "topology") {
+        if (format_version < 2U || fields.contains("parent_b") || !record.locks.empty()) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_error(LineageErrorCode::malformed_lineage, "topology lineage requires AML v2, one parent, and no parameter locks"));
+        }
+        const auto strength = fields.find("strength");
+        const auto budget = fields.find("budget");
+        const auto structural_locks = fields.find("structural_locks");
+        double parsed_strength = 0.0;
+        u32 parsed_budget = 0U;
+        if (strength == fields.end() || budget == fields.end() || structural_locks == fields.end() ||
+            !parse_real(strength->second, parsed_strength) || parsed_strength < 0.0 || parsed_strength > 1.0 ||
+            !parse_u32(budget->second, parsed_budget) || parsed_budget == 0U ||
+            parsed_budget > kMaximumTopologyMutationBudget) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_error(LineageErrorCode::malformed_lineage, "topology lineage requires strength [0,1], budget 1..16, and structural locks"));
+        }
+        record.kind = LineageOperationKind::topology_mutation;
+        record.mutation_strength = parsed_strength;
+        record.topology_budget = parsed_budget;
+        record.structural_locks = structural_locks->second == "-" ? std::string{} : structural_locks->second;
+        if (!record.structural_locks.empty() && !lock_token(record.structural_locks)) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_error(LineageErrorCode::malformed_lineage, "topology structural-lock token is malformed"));
+        }
+        auto parsed_locks = parse_structural_locks(record.structural_locks);
+        if (parsed_locks.is_error()) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_error(LineageErrorCode::malformed_lineage, parsed_locks.error().message));
+        }
     } else {
         return Result<LineageRecord, LineageError>::failure(
             make_error(LineageErrorCode::malformed_lineage, "unknown lineage operation kind"));

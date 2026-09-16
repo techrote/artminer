@@ -8,12 +8,13 @@
 #include "core/recipe.hpp"
 #include "core/result.hpp"
 #include "core/specimen_browser.hpp"
+#include "core/topology_mutation.hpp"
 #include "core/types.hpp"
 
 namespace artminer::core {
 
 inline constexpr u32 kCrossoverOperatorVersion = 1U;
-inline constexpr u32 kLineageFormatVersion = 1U;
+inline constexpr u32 kLineageFormatVersion = 2U;
 
 enum class CrossoverErrorCode {
     invalid_parent,
@@ -39,6 +40,7 @@ enum class LineageOperationKind {
     parameter_mutation,
     seed_variant,
     crossover,
+    topology_mutation,
 };
 
 struct LineageRecord {
@@ -50,6 +52,8 @@ struct LineageRecord {
     u64 operation_seed{0U};
     std::optional<double> mutation_strength;
     std::string locks;
+    std::optional<u32> topology_budget;
+    std::string structural_locks;
 };
 
 enum class LineageErrorCode {
@@ -86,6 +90,15 @@ struct LineageError {
     const Recipe& parent,
     u64 variation_seed,
     u32 operator_version = kParameterMutationOperatorVersion);
+
+[[nodiscard]] LineageRecord make_topology_mutation_lineage_record(
+    const Recipe& child,
+    const Recipe& parent,
+    u64 topology_seed,
+    u32 operator_version,
+    double strength,
+    u32 budget,
+    const StructuralLocks& locks);
 
 [[nodiscard]] std::string serialize_lineage_record(const LineageRecord& record);
 [[nodiscard]] Result<LineageRecord, LineageError> parse_lineage_record(std::string_view text);

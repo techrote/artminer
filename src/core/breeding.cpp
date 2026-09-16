@@ -77,7 +77,9 @@ constexpr u64 kCrossoverPickDomain = 0x43524f5353504943ULL;  // "CROSSPIC"
 
 void erase_operation_metadata(Recipe& recipe) {
     std::erase_if(recipe.metadata, [](const RecipeMetadata& metadata) {
-        return metadata.key.starts_with("artminer.mutation.") || metadata.key.starts_with("artminer.crossover.");
+        return metadata.key.starts_with("artminer.mutation.") ||
+            metadata.key.starts_with("artminer.crossover.") ||
+            metadata.key.starts_with("artminer.topology.");
     });
 }
 
@@ -250,7 +252,8 @@ using FlatMap = std::map<std::string, std::string>;
         }
     }
     for (const auto& edge : recipe.edges) {
-        const std::string key = "edge." + edge.from_node + "." + edge.from_port + "->" + edge.to_node + "." + edge.to_port;
+        const std::string key =
+            "edge." + edge.from_node + "." + edge.from_port + "->" + edge.to_node + "." + edge.to_port;
         values[key] = "present";
     }
     for (const auto& output : recipe.outputs) {
@@ -381,6 +384,45 @@ Result<Recipe, CrossoverError> crossover_recipes(
 
 Result<LineageRecord, LineageError> lineage_record_from_recipe(const Recipe& recipe) {
     const std::string child = semantic_fingerprint(recipe);
+
+    if (const std::string* parent = metadata_value(recipe, "artminer.topology.parent"); parent != nullptr) {
+        const std::string* seed_text = metadata_value(recipe, "artminer.topology.seed");
+        const std::string* operator_text = metadata_value(recipe, "artminer.topology.operator");
+        const std::string* strength_text = metadata_value(recipe, "artminer.topology.strength");
+        const std::string* budget_text = metadata_value(recipe, "artminer.topology.budget");
+        const std::string* structural_locks = metadata_value(recipe, "artminer.topology.locks");
+        if (seed_text == nullptr || operator_text == nullptr || strength_text == nullptr ||
+            budget_text == nullptr || structural_locks == nullptr) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::malformed_lineage, "topology lineage metadata is incomplete"));
+        }
+        u64 seed = 0U;
+        u32 operator_version = 0U;
+        u32 budget = 0U;
+        double strength = 0.0;
+        if (!parse_u64(*seed_text, seed) || !parse_u32(*operator_text, operator_version) ||
+            !parse_u32(*budget_text, budget) || !parse_double(*strength_text, strength) ||
+            strength < 0.0 || strength > 1.0 || budget == 0U || budget > kMaximumTopologyMutationBudget) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::malformed_lineage, "topology lineage numeric metadata is malformed"));
+        }
+        auto parsed_structural = parse_structural_locks(*structural_locks);
+        if (parsed_structural.is_error()) {
+            return Result<LineageRecord, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::malformed_lineage, parsed_structural.error().message));
+        }
+        LineageRecord record;
+        record.kind = LineageOperationKind::topology_mutation;
+        record.child_fingerprint = child;
+        record.parent_a_fingerprint = *parent;
+        record.operator_version = operator_version;
+        record.operation_seed = seed;
+        record.mutation_strength = strength;
+        record.topology_budget = budget;
+        record.structural_locks = *structural_locks;
+        return Result<LineageRecord, LineageError>::success(std::move(record));
+    }
+
     if (const std::string* parent_a = metadata_value(recipe, "artminer.crossover.parent_a"); parent_a != nullptr) {
         const std::string* parent_b = metadata_value(recipe, "artminer.crossover.parent_b");
         const std::string* seed_text = metadata_value(recipe, "artminer.crossover.seed");
@@ -404,7 +446,9 @@ Result<LineageRecord, LineageError> lineage_record_from_recipe(const Recipe& rec
             operator_version,
             seed,
             std::nullopt,
-            locks == nullptr ? std::string{} : *locks});
+            locks == nullptr ? std::string{} : *locks,
+            std::nullopt,
+            {}});
     }
 
     if (const std::string* kind = metadata_value(recipe, "artminer.mutation.kind"); kind != nullptr) {
@@ -437,7 +481,9 @@ Result<LineageRecord, LineageError> lineage_record_from_recipe(const Recipe& rec
                 operator_version,
                 seed,
                 strength,
-                locks == nullptr ? std::string{} : *locks});
+                locks == nullptr ? std::string{} : *locks,
+                std::nullopt,
+                {}});
         }
         if (*kind == "seed-only") {
             return Result<LineageRecord, LineageError>::success(LineageRecord{
@@ -447,6 +493,8 @@ Result<LineageRecord, LineageError> lineage_record_from_recipe(const Recipe& rec
                 std::nullopt,
                 operator_version,
                 seed,
+                std::nullopt,
+                {},
                 std::nullopt,
                 {}});
         }
@@ -467,6 +515,37 @@ Result<Recipe, LineageError> replay_lineage_record(
         return Result<Recipe, LineageError>::failure(
             make_lineage_error(LineageErrorCode::parent_mismatch, "parent A semantic fingerprint does not match lineage record"));
     }
+
+    if (record.kind == LineageOperationKind::topology_mutation) {
+        if (!record.mutation_strength.has_value() || !record.topology_budget.has_value()) {
+            return Result<Recipe, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::malformed_lineage, "topology lineage is missing strength or budget"));
+        }
+        auto structural = parse_structural_locks(record.structural_locks);
+        if (structural.is_error()) {
+            return Result<Recipe, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::malformed_lineage, structural.error().message));
+        }
+        auto mutated = mutate_recipe_topology(
+            parent_a,
+            record.operation_seed,
+            record.operator_version,
+            *record.mutation_strength,
+            *record.topology_budget,
+            structural.value(),
+            registry);
+        if (mutated.is_error()) {
+            return Result<Recipe, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::replay_failed, mutated.error().message));
+        }
+        Recipe replayed = std::move(mutated).value().recipe;
+        if (semantic_fingerprint(replayed) != record.child_fingerprint) {
+            return Result<Recipe, LineageError>::failure(
+                make_lineage_error(LineageErrorCode::replay_failed, "replayed child semantic fingerprint differs from lineage record"));
+        }
+        return Result<Recipe, LineageError>::success(std::move(replayed));
+    }
+
     auto parsed_locks = parse_locks(record.locks);
     if (parsed_locks.is_error()) {
         return Result<Recipe, LineageError>::failure(parsed_locks.error());
@@ -508,13 +587,16 @@ Result<Recipe, LineageError> replay_lineage_record(
                 make_lineage_error(LineageErrorCode::replay_failed, mutated.error().message));
         }
         replayed = std::move(mutated).value();
-    } else {
+    } else if (record.kind == LineageOperationKind::seed_variant) {
         auto varied = make_seed_variant(parent_a, record.operation_seed, record.operator_version);
         if (varied.is_error()) {
             return Result<Recipe, LineageError>::failure(
                 make_lineage_error(LineageErrorCode::replay_failed, varied.error().message));
         }
         replayed = std::move(varied).value();
+    } else {
+        return Result<Recipe, LineageError>::failure(
+            make_lineage_error(LineageErrorCode::malformed_lineage, "unknown lineage operation kind"));
     }
 
     if (semantic_fingerprint(replayed) != record.child_fingerprint) {

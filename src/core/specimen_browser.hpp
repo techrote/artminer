@@ -16,6 +16,8 @@ namespace artminer::core {
 inline constexpr u32 kParameterMutationOperatorVersion = 1U;
 inline constexpr std::size_t kSpecimenGridSize = 16U;
 
+class StructuralLocks;
+
 enum class SpecimenGenerationMode {
     parameter_mutation,
     seed_only,
@@ -29,6 +31,7 @@ enum class MutationErrorCode {
     unknown_parameter,
     invalid_parameter_value,
     invalid_child,
+    topology_failed,
 };
 
 struct MutationError {
@@ -85,6 +88,17 @@ struct GeneratedSpecimen {
     double strength,
     SpecimenGenerationMode mode,
     const ParameterLocks& locks,
+    const NodeRegistry& registry = builtin_node_registry());
+
+// AM-014 structural specimen generation is deliberately separate from parameter
+// mutation: topology budget and structural locks are explicit search semantics.
+[[nodiscard]] Result<std::vector<GeneratedSpecimen>, MutationError> generate_topology_specimen_grid(
+    const Recipe& parent,
+    u64 generation_seed,
+    u32 operator_version,
+    double strength,
+    u32 budget,
+    const StructuralLocks& locks,
     const NodeRegistry& registry = builtin_node_registry());
 
 [[nodiscard]] Result<Recipe, MutationError> set_parameter_from_text(
