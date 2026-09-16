@@ -146,7 +146,6 @@ struct AppState final {
     nodes::Image frame;
     std::vector<core::u8> bgra;
     core::u64 requested_generation{0U};
-    core::u64 rendered_tick{0U};
     ULONGLONG last_clock_milliseconds{0U};
     std::wstring status{L"Preparing canonical frame..."};
 };
@@ -169,7 +168,7 @@ void request_frame(AppState& state) {
 
 void layout_children(AppState& state, const int width, const int height) {
     const int band_top = (std::max)(0, height - kControlBandHeight);
-    const int button_width = 86;
+    constexpr int button_width = 86;
     const int y = band_top + kGap;
     MoveWindow(state.play_button, kGap, y, button_width, 28, TRUE);
     MoveWindow(state.step_button, kGap * 2 + button_width, y, button_width, 28, TRUE);
@@ -184,7 +183,7 @@ void layout_children(AppState& state, const int width, const int height) {
 
 void draw_frame(AppState& state, HDC dc, const RECT& client) {
     RECT image_area = client;
-    image_area.bottom = (std::max)(image_area.top, image_area.bottom - kControlBandHeight);
+    image_area.bottom = (std::max)(image_area.top, image_area.bottom - static_cast<LONG>(kControlBandHeight));
     FillRect(dc, &image_area, GetSysColorBrush(COLOR_WINDOW));
     if (state.frame.width == 0U || state.frame.height == 0U || state.bgra.empty()) {
         SetBkMode(dc, TRANSPARENT);
@@ -197,15 +196,17 @@ void draw_frame(AppState& state, HDC dc, const RECT& client) {
         return;
     }
 
-    const int available_width = (std::max)(1, image_area.right - image_area.left - kGap * 2);
-    const int available_height = (std::max)(1, image_area.bottom - image_area.top - kGap * 2);
+    const int area_width = static_cast<int>(image_area.right - image_area.left);
+    const int area_height = static_cast<int>(image_area.bottom - image_area.top);
+    const int available_width = (std::max)(1, area_width - kGap * 2);
+    const int available_height = (std::max)(1, area_height - kGap * 2);
     const double x_scale = static_cast<double>(available_width) / static_cast<double>(state.frame.width);
     const double y_scale = static_cast<double>(available_height) / static_cast<double>(state.frame.height);
     const double scale = (std::min)(x_scale, y_scale);
     const int draw_width = (std::max)(1, static_cast<int>(static_cast<double>(state.frame.width) * scale));
     const int draw_height = (std::max)(1, static_cast<int>(static_cast<double>(state.frame.height) * scale));
-    const int left = image_area.left + (image_area.right - image_area.left - draw_width) / 2;
-    const int top = image_area.top + (image_area.bottom - image_area.top - draw_height) / 2;
+    const int left = static_cast<int>(image_area.left) + (area_width - draw_width) / 2;
+    const int top = static_cast<int>(image_area.top) + (area_height - draw_height) / 2;
 
     BITMAPINFO bitmap{};
     bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -310,7 +311,7 @@ LRESULT CALLBACK window_proc(HWND window, const UINT message, const WPARAM w_par
     }
     case WM_SIZE:
         if (state != nullptr) {
-            layout_children(*state, LOWORD(l_param), HIWORD(l_param));
+            layout_children(*state, static_cast<int>(LOWORD(l_param)), static_cast<int>(HIWORD(l_param)));
         }
         return 0;
     case WM_COMMAND:
@@ -345,7 +346,6 @@ LRESULT CALLBACK window_proc(HWND window, const UINT message, const WPARAM w_par
                         state->bgra[offset + 2U] = state->frame.rgba[offset + 0U];
                         state->bgra[offset + 3U] = state->frame.rgba[offset + 3U];
                     }
-                    state->rendered_tick = completed->tick;
                     state->status = L"Canonical tick " + std::to_wstring(completed->tick) +
                         L" | image " + widen_utf8(nodes::image_fingerprint(state->frame));
                 }
@@ -461,7 +461,10 @@ int run_playback_application(const core::Recipe& recipe) {
 
     RECT client{};
     GetClientRect(window, &client);
-    layout_children(state, client.right - client.left, client.bottom - client.top);
+    layout_children(
+        state,
+        static_cast<int>(client.right - client.left),
+        static_cast<int>(client.bottom - client.top));
     state.worker = std::make_unique<RenderWorker>(window, state.recipe);
     state.last_clock_milliseconds = GetTickCount64();
     request_frame(state);
