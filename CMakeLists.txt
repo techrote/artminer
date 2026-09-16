@@ -68,6 +68,7 @@ artminer_apply_warnings(artminer_nodes)
 add_library(artminer_quarry STATIC
     src/quarry/metrics.cpp
     src/quarry/quarry.cpp
+    src/quarry/thumbnail_cache.cpp
 )
 target_include_directories(artminer_quarry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(artminer_quarry PUBLIC artminer_core artminer_nodes)
