@@ -1,0 +1,16 @@
+# Stable-ID fixed-step walkers with deterministic deposition. Try --tick 60.
+amr 1
+evaluator 1
+seed 10723151780598845931
+render 128 128 "reference"
+node "growth" "core.growth.walkers" 1
+param "growth" "walkers" i64 128
+param "growth" "steps_per_tick" i64 3
+param "growth" "turn_chance" f64 0.22
+param "growth" "deposit" f64 0.075
+param "growth" "decay" f64 0.004
+param "growth" "boundary" enum "wrap"
+param "growth" "palette" enum "forest"
+output "main" "growth" "image"
+meta "example.family" "walkers-deposition"
+meta "example.recommended_tick" "60"
