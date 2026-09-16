@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(ArtMiner VERSION 0.1.0 LANGUAGES CXX)
+project(ArtMiner VERSION 1.0.0 LANGUAGES CXX)
 
 if(NOT WIN32)
     message(FATAL_ERROR "ArtMiner targets Windows 10/11 x64.")
@@ -143,150 +143,80 @@ target_link_libraries(ArtMiner PRIVATE
 target_compile_definitions(ArtMiner PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMiner)
 
-add_executable(ArtMinerTests
-    tests/test_main.cpp
-)
-target_link_libraries(ArtMinerTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_platform_windows
-    artminer_export_windows
-    artminer_gpu_windows
-)
+add_executable(ArtMinerTests tests/test_main.cpp)
+target_link_libraries(ArtMinerTests PRIVATE artminer_core artminer_nodes artminer_platform_windows artminer_export_windows artminer_gpu_windows)
 target_compile_definitions(ArtMinerTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerTests)
 
-add_executable(ArtMinerGpuTests
-    tests/gpu_preview_test.cpp
-)
-target_link_libraries(ArtMinerGpuTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_gpu_windows
-)
+add_executable(ArtMinerGpuTests tests/gpu_preview_test.cpp)
+target_link_libraries(ArtMinerGpuTests PRIVATE artminer_core artminer_nodes artminer_gpu_windows)
 target_compile_definitions(ArtMinerGpuTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerGpuTests)
 
-add_executable(ArtMinerSpecimenTests
-    tests/specimen_browser_test.cpp
-)
-target_link_libraries(ArtMinerSpecimenTests PRIVATE
-    artminer_core
-    artminer_platform_windows
-)
+add_executable(ArtMinerSpecimenTests tests/specimen_browser_test.cpp)
+target_link_libraries(ArtMinerSpecimenTests PRIVATE artminer_core artminer_platform_windows)
 target_compile_definitions(ArtMinerSpecimenTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerSpecimenTests)
 
-add_executable(ArtMinerGrowthTests
-    tests/growth_systems_test.cpp
-)
-target_link_libraries(ArtMinerGrowthTests PRIVATE
-    artminer_core
-    artminer_nodes
-)
+add_executable(ArtMinerGrowthTests tests/growth_systems_test.cpp)
+target_link_libraries(ArtMinerGrowthTests PRIVATE artminer_core artminer_nodes)
 target_compile_definitions(ArtMinerGrowthTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerGrowthTests)
 
-add_executable(ArtMinerMotionTests
-    tests/motion_systems_test.cpp
-)
-target_link_libraries(ArtMinerMotionTests PRIVATE
-    artminer_core
-    artminer_nodes
-)
+add_executable(ArtMinerMotionTests tests/motion_systems_test.cpp)
+target_link_libraries(ArtMinerMotionTests PRIVATE artminer_core artminer_nodes)
 target_compile_definitions(ArtMinerMotionTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerMotionTests)
 
-add_executable(ArtMinerBreedingTests
-    tests/breeding_lineage_test.cpp
-)
-target_link_libraries(ArtMinerBreedingTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_platform_windows
-)
+add_executable(ArtMinerBreedingTests tests/breeding_lineage_test.cpp)
+target_link_libraries(ArtMinerBreedingTests PRIVATE artminer_core artminer_nodes artminer_platform_windows)
 target_compile_definitions(ArtMinerBreedingTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerBreedingTests)
 
-add_executable(ArtMinerExportTests
-    tests/export_test.cpp
-)
-target_link_libraries(ArtMinerExportTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_export_windows
-)
+add_executable(ArtMinerExportTests tests/export_test.cpp)
+target_link_libraries(ArtMinerExportTests PRIVATE artminer_core artminer_nodes artminer_export_windows)
 target_compile_definitions(ArtMinerExportTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerExportTests)
 
-add_executable(ArtMinerQuarryTests
-    tests/quarry_test.cpp
-)
-target_link_libraries(ArtMinerQuarryTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_quarry
-)
+add_executable(ArtMinerQuarryTests tests/quarry_test.cpp)
+target_link_libraries(ArtMinerQuarryTests PRIVATE artminer_core artminer_nodes artminer_quarry)
 target_compile_definitions(ArtMinerQuarryTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerQuarryTests)
 
-add_executable(ArtMinerQuarryThumbnailTests
-    tests/quarry_thumbnail_test.cpp
-)
-target_link_libraries(ArtMinerQuarryThumbnailTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_quarry
-)
+add_executable(ArtMinerQuarryThumbnailTests tests/quarry_thumbnail_test.cpp)
+target_link_libraries(ArtMinerQuarryThumbnailTests PRIVATE artminer_core artminer_nodes artminer_quarry)
 target_compile_definitions(ArtMinerQuarryThumbnailTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerQuarryThumbnailTests)
 
-add_executable(ArtMinerQuarryDiversityTests
-    tests/quarry_diversity_test.cpp
-)
-target_link_libraries(ArtMinerQuarryDiversityTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_quarry
-    artminer_platform_windows
-)
+add_executable(ArtMinerQuarryDiversityTests tests/quarry_diversity_test.cpp)
+target_link_libraries(ArtMinerQuarryDiversityTests PRIVATE artminer_core artminer_nodes artminer_quarry artminer_platform_windows)
 target_compile_definitions(ArtMinerQuarryDiversityTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerQuarryDiversityTests)
 
-add_executable(ArtMinerGlyphTests
-    tests/glyph_synthesis_test.cpp
-)
-target_link_libraries(ArtMinerGlyphTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_export_windows
-)
+add_executable(ArtMinerGlyphTests tests/glyph_synthesis_test.cpp)
+target_link_libraries(ArtMinerGlyphTests PRIVATE artminer_core artminer_nodes artminer_export_windows)
 target_compile_definitions(ArtMinerGlyphTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerGlyphTests)
 
-add_executable(ArtMinerMaterialTests
-    tests/material_workflows_test.cpp
-)
-target_link_libraries(ArtMinerMaterialTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_quarry
-    artminer_export_windows
-)
+add_executable(ArtMinerMaterialTests tests/material_workflows_test.cpp)
+target_link_libraries(ArtMinerMaterialTests PRIVATE artminer_core artminer_nodes artminer_quarry artminer_export_windows)
 target_compile_definitions(ArtMinerMaterialTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerMaterialTests)
 
-add_executable(ArtMinerTopologyTests
-    tests/topology_mutation_test.cpp
-)
-target_link_libraries(ArtMinerTopologyTests PRIVATE
-    artminer_core
-    artminer_nodes
-    artminer_quarry
-    artminer_export_windows
-)
+add_executable(ArtMinerTopologyTests tests/topology_mutation_test.cpp)
+target_link_libraries(ArtMinerTopologyTests PRIVATE artminer_core artminer_nodes artminer_quarry artminer_export_windows)
 target_compile_definitions(ArtMinerTopologyTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerTopologyTests)
+
+add_executable(ArtMinerReleaseHardeningTests tests/release_hardening_test.cpp)
+target_link_libraries(ArtMinerReleaseHardeningTests PRIVATE artminer_core artminer_nodes artminer_platform_windows artminer_export_windows)
+target_compile_definitions(ArtMinerReleaseHardeningTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerReleaseHardeningTests)
+
+add_executable(ArtMinerReleaseBenchmark tests/release_benchmark.cpp)
+target_link_libraries(ArtMinerReleaseBenchmark PRIVATE artminer_core artminer_nodes artminer_quarry artminer_export_windows)
+target_compile_definitions(ArtMinerReleaseBenchmark PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+artminer_apply_warnings(ArtMinerReleaseBenchmark)
 
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
@@ -302,8 +232,9 @@ add_test(NAME artminer.quarry-diversity COMMAND ArtMinerQuarryDiversityTests)
 add_test(NAME artminer.glyph-ansi COMMAND ArtMinerGlyphTests)
 add_test(NAME artminer.material-workflows COMMAND ArtMinerMaterialTests)
 add_test(NAME artminer.topology-mutation COMMAND ArtMinerTopologyTests)
+add_test(NAME artminer.release-hardening COMMAND ArtMinerReleaseHardeningTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
-set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
+set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 1.0.0")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
 set_tests_properties(artminer.help PROPERTIES PASS_REGULAR_EXPRESSION "Usage: ArtMiner")
 add_test(NAME artminer.workspace COMMAND ArtMiner --workspace "${CMAKE_CURRENT_BINARY_DIR}/ctest-workspace" --check-workspace)
@@ -312,37 +243,19 @@ add_test(NAME artminer.recipe.validate COMMAND ArtMiner recipe validate "${CMAKE
 set_tests_properties(artminer.recipe.validate PROPERTIES PASS_REGULAR_EXPRESSION "valid b9aed1288926e59c8c40115733cd32bf")
 add_test(NAME artminer.recipe.inspect COMMAND ArtMiner recipe inspect "${CMAKE_CURRENT_SOURCE_DIR}/examples/am002-minimal.amr")
 set_tests_properties(artminer.recipe.inspect PROPERTIES PASS_REGULAR_EXPRESSION "fingerprint: b9aed1288926e59c8c40115733cd32bf")
-add_test(
-    NAME artminer.recipe.validate.glyph
-    COMMAND ArtMiner recipe validate "${CMAKE_CURRENT_SOURCE_DIR}/examples/am012-glyph-x-lines.amr")
-add_test(
-    NAME artminer.recipe.validate.material
-    COMMAND ArtMiner recipe validate "${CMAKE_CURRENT_SOURCE_DIR}/examples/am013-height-normal.amr")
-add_test(
-    NAME artminer.render.reference
-    COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am003-fbm-warp.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am003-fbm-warp.png")
+add_test(NAME artminer.recipe.validate.glyph COMMAND ArtMiner recipe validate "${CMAKE_CURRENT_SOURCE_DIR}/examples/am012-glyph-x-lines.amr")
+add_test(NAME artminer.recipe.validate.material COMMAND ArtMiner recipe validate "${CMAKE_CURRENT_SOURCE_DIR}/examples/am013-height-normal.amr")
+add_test(NAME artminer.render.reference COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am003-fbm-warp.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am003-fbm-warp.png")
 set_tests_properties(artminer.render.reference PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
-add_test(
-    NAME artminer.render.growth
-    COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-reaction-diffusion.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-growth.png")
+add_test(NAME artminer.render.growth COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-reaction-diffusion.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-growth.png")
 set_tests_properties(artminer.render.growth PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
-add_test(
-    NAME artminer.render.motion-tick
-    COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 12 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-flow.png")
+add_test(NAME artminer.render.motion-tick COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 12 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-flow.png")
 set_tests_properties(artminer.render.motion-tick PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 12 .* image-hash")
-add_test(
-    NAME artminer.render.feedback-tick
-    COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-feedback-trails.amr" 4 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-feedback.png")
+add_test(NAME artminer.render.feedback-tick COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-feedback-trails.amr" 4 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-feedback.png")
 set_tests_properties(artminer.render.feedback-tick PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 4 .* image-hash")
-add_test(
-    NAME artminer.render.motion-range
-    COMMAND ArtMiner render-range "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 0 2 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-range")
+add_test(NAME artminer.render.motion-range COMMAND ArtMiner render-range "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 0 2 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-range")
 set_tests_properties(artminer.render.motion-range PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 2 .* image-hash")
-add_test(
-    NAME artminer.material.seam
-    COMMAND ArtMiner material seam "${CMAKE_CURRENT_SOURCE_DIR}/examples/am013-seamless-texture.amr" main 0.000001)
+add_test(NAME artminer.material.seam COMMAND ArtMiner material seam "${CMAKE_CURRENT_SOURCE_DIR}/examples/am013-seamless-texture.amr" main 0.000001)
 set_tests_properties(artminer.material.seam PROPERTIES PASS_REGULAR_EXPRESSION "seam PASS")
-add_test(
-    NAME artminer.material.loop
-    COMMAND ArtMiner material loop "${CMAKE_CURRENT_SOURCE_DIR}/examples/am013-validated-loop.amr" 32 main 0.000001)
+add_test(NAME artminer.material.loop COMMAND ArtMiner material loop "${CMAKE_CURRENT_SOURCE_DIR}/examples/am013-validated-loop.amr" 32 main 0.000001)
 set_tests_properties(artminer.material.loop PROPERTIES PASS_REGULAR_EXPRESSION "loop VALIDATED")
