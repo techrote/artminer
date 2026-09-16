@@ -112,6 +112,7 @@ add_executable(ArtMiner
     src/app/main.cpp
     src/app/playback_window.cpp
     src/app/quarry_command.cpp
+    src/app/quarry_diversity_command.cpp
     src/app/quarry_window.cpp
 )
 target_link_libraries(ArtMiner PRIVATE
