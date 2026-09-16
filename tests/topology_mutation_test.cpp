@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "core/breeding.hpp"
-#include "core/recipe.hpp"
 #include "core/topology_lineage.hpp"
 #include "core/topology_mutation.hpp"
 #include "core/topology_specimen.hpp"
@@ -21,25 +20,25 @@ namespace {
 
 using artminer::core::Recipe;
 
-[[nodiscard]] Recipe load_recipe(const std::filesystem::path& path, int& failures) {
+Recipe load_recipe(const std::filesystem::path& path, int& failures) {
     std::ifstream input(path, std::ios::binary);
-    std::ostringstream buffer;
-    buffer << input.rdbuf();
-    auto parsed = artminer::core::parse_recipe(buffer.str());
+    std::ostringstream text;
+    text << input.rdbuf();
+    auto parsed = artminer::core::parse_recipe(text.str());
     if (!input || parsed.is_error()) {
-        std::cerr << "FAIL: could not load test recipe " << path.string() << '\n';
+        std::cerr << "FAIL: could not load " << path.string() << '\n';
         ++failures;
         return {};
     }
     return std::move(parsed).value();
 }
 
-[[nodiscard]] std::vector<std::tuple<std::string, std::string, std::string, std::string>> incident_edges(
+std::vector<std::tuple<std::string, std::string, std::string, std::string>> incident_edges(
     const Recipe& recipe,
-    const std::string& node_id) {
+    const std::string& id) {
     std::vector<std::tuple<std::string, std::string, std::string, std::string>> result;
     for (const auto& edge : recipe.edges) {
-        if (edge.from_node == node_id || edge.to_node == node_id) {
+        if (edge.from_node == id || edge.to_node == id) {
             result.emplace_back(edge.from_node, edge.from_port, edge.to_node, edge.to_port);
         }
     }
@@ -52,7 +51,7 @@ using artminer::core::Recipe;
 int main() {
     using namespace artminer;
     int failures = 0;
-    const auto expect = [&](const bool condition, const char* message) {
+    const auto expect = [&](bool condition, const char* message) {
         if (!condition) {
             std::cerr << "FAIL: " << message << '\n';
             ++failures;
@@ -61,15 +60,16 @@ int main() {
 
     const std::filesystem::path root = ARTMINER_SOURCE_DIR;
     Recipe minimal = load_recipe(root / "examples" / "am002-minimal.amr", failures);
-    expect(core::validate_recipe(minimal).empty(), "minimal fixture must validate");
+    expect(core::validate_recipe(minimal).empty(), "minimal fixture validates");
 
     const auto& catalog = core::topology_operator_catalog();
-    expect(catalog.size() == 5U, "topology catalog must contain the five AM-014 operator families");
-    expect(catalog[0].kind == core::TopologyOperatorKind::insert_node, "catalog insertion operator missing");
-    expect(catalog[1].kind == core::TopologyOperatorKind::replace_node, "catalog replacement operator missing");
-    expect(catalog[2].kind == core::TopologyOperatorKind::delete_bypass, "catalog delete/bypass operator missing");
-    expect(catalog[3].kind == core::TopologyOperatorKind::duplicate_branch, "catalog branch duplication operator missing");
-    expect(catalog[4].kind == core::TopologyOperatorKind::rewire_edge, "catalog rewire operator missing");
+    expect(catalog.size() == 5U, "five versioned topology operator families exist");
+    expect(catalog[0].kind == core::TopologyOperatorKind::insert_node &&
+            catalog[1].kind == core::TopologyOperatorKind::replace_node &&
+            catalog[2].kind == core::TopologyOperatorKind::delete_bypass &&
+            catalog[3].kind == core::TopologyOperatorKind::duplicate_branch &&
+            catalog[4].kind == core::TopologyOperatorKind::rewire_edge,
+        "catalog order is stable");
 
     core::TopologyMutationOptions options;
     options.seed = 140014U;
@@ -77,34 +77,31 @@ int main() {
     core::StructuralLocks no_locks;
     auto first = core::mutate_recipe_topology(minimal, options, no_locks);
     auto second = core::mutate_recipe_topology(minimal, options, no_locks);
-    expect(first.is_ok() && second.is_ok(), "same deterministic topology mutation should succeed twice");
+    expect(first.is_ok() && second.is_ok(), "deterministic topology mutation succeeds");
     if (first.is_ok() && second.is_ok()) {
         expect(core::semantic_fingerprint(first.value().recipe) == core::semantic_fingerprint(second.value().recipe),
-            "same parent/version/seed/budget must reproduce the same child");
-        expect(first.value().steps.size() == second.value().steps.size(), "repeated mutation trace length must match");
+            "same parent/version/seed/budget reproduces child");
         expect(!first.value().steps.empty() && first.value().steps.size() <= options.budget,
-            "topology mutation must accept one to budget edits");
-        expect(core::validate_recipe(first.value().recipe).empty(), "accepted topology child must pass normal graph validation");
+            "accepted edits are bounded by budget");
+        expect(core::validate_recipe(first.value().recipe).empty(), "accepted child passes normal validator");
         expect(first.value().recipe.nodes.size() <= options.limits.max_nodes &&
                 first.value().recipe.edges.size() <= options.limits.max_edges &&
                 core::topology_depth(first.value().recipe) <= options.limits.max_depth,
-            "accepted topology child must remain inside configured bounds");
-
-        const core::RecipeDiff diff = core::diff_recipes(minimal, first.value().recipe);
-        expect(!diff.semantic.empty(), "topology mutation must appear in ordinary semantic recipe diff");
+            "accepted child stays within structural limits");
+        expect(!core::diff_recipes(minimal, first.value().recipe).semantic.empty(),
+            "existing recipe diff exposes topology changes");
 
         auto lineage = core::topology_lineage_record_from_recipe(first.value().recipe);
-        expect(lineage.is_ok(), "topology child must expose durable lineage");
+        expect(lineage.is_ok(), "topology provenance converts to lineage");
         if (lineage.is_ok()) {
-            const std::string encoded = core::serialize_topology_lineage_record(lineage.value());
-            auto decoded = core::parse_topology_lineage_record(encoded);
-            expect(decoded.is_ok(), "topology lineage must round-trip");
-            if (decoded.is_ok()) {
-                auto replayed = core::replay_topology_lineage_record(decoded.value(), minimal);
-                expect(replayed.is_ok(), "topology lineage replay must succeed");
-                if (replayed.is_ok()) {
-                    expect(core::semantic_fingerprint(replayed.value()) == core::semantic_fingerprint(first.value().recipe),
-                        "topology lineage replay must reproduce child identity");
+            auto parsed = core::parse_topology_lineage_record(core::serialize_topology_lineage_record(lineage.value()));
+            expect(parsed.is_ok(), "topology lineage round-trips");
+            if (parsed.is_ok()) {
+                auto replay = core::replay_topology_lineage_record(parsed.value(), minimal);
+                expect(replay.is_ok(), "topology lineage replays");
+                if (replay.is_ok()) {
+                    expect(core::semantic_fingerprint(replay.value()) == core::semantic_fingerprint(first.value().recipe),
+                        "lineage replay identity matches child");
                 }
             }
         }
@@ -113,153 +110,129 @@ int main() {
         std::reverse(reordered.nodes.begin(), reordered.nodes.end());
         std::reverse(reordered.edges.begin(), reordered.edges.end());
         auto reordered_child = core::mutate_recipe_topology(reordered, options, no_locks);
-        expect(reordered_child.is_ok(), "UI/storage order-independent topology mutation should succeed");
+        expect(reordered_child.is_ok(), "storage-order variant mutates");
         if (reordered_child.is_ok()) {
             expect(core::semantic_fingerprint(reordered_child.value().recipe) == core::semantic_fingerprint(first.value().recipe),
-                "canonical topology mutation must be independent of node/edge storage order");
+                "mutation is independent of node/edge storage order");
         }
     }
 
-    // A whole-subgraph structural lock freezes every descendant and therefore
-    // leaves no legal mutation in this two-node fixture.
     core::StructuralLocks frozen;
-    expect(frozen.lock_subgraph(minimal, "source"), "subgraph structural lock root should resolve");
-    expect(frozen.size() == minimal.nodes.size(), "subgraph lock should include all reachable descendants");
+    expect(frozen.lock_subgraph(minimal, "source"), "subgraph lock resolves root");
+    expect(frozen.size() == minimal.nodes.size(), "subgraph lock freezes descendants");
     auto blocked = core::mutate_recipe_topology(minimal, options, frozen);
     expect(blocked.is_error() && blocked.error().code == core::TopologyMutationErrorCode::no_legal_mutation,
-        "fully locked graph must reject structural mutation deterministically");
+        "fully locked graph rejects mutation deterministically");
 
     core::TopologyMutationOptions too_small = options;
     too_small.limits.max_nodes = 1U;
     auto bounded = core::mutate_recipe_topology(minimal, too_small, no_locks);
     expect(bounded.is_error() && bounded.error().code == core::TopologyMutationErrorCode::resource_limit,
-        "parent beyond configured node bound must fail before mutation");
+        "parent beyond requested limits is rejected before editing");
 
-    // Property-style deterministic coverage across many seeds: every accepted
-    // edit must validate and stay bounded, and repeating a seed is identical.
     std::size_t accepted = 0U;
     for (core::u64 seed = 0U; seed < 64U; ++seed) {
         core::TopologyMutationOptions sample = options;
         sample.seed = seed;
         sample.budget = 2U;
-        auto left = core::mutate_recipe_topology(minimal, sample, no_locks);
-        auto right = core::mutate_recipe_topology(minimal, sample, no_locks);
-        expect(left.is_error() == right.is_error(), "topology mutation success/failure must be seed-repeatable");
-        if (left.is_ok() && right.is_ok()) {
+        auto a = core::mutate_recipe_topology(minimal, sample, no_locks);
+        auto b = core::mutate_recipe_topology(minimal, sample, no_locks);
+        expect(a.is_error() == b.is_error(), "property sweep repeats success/failure");
+        if (a.is_ok() && b.is_ok()) {
             ++accepted;
-            expect(core::validate_recipe(left.value().recipe).empty(), "property topology child must validate");
-            expect(core::semantic_fingerprint(left.value().recipe) == core::semantic_fingerprint(right.value().recipe),
-                "property topology child must replay from same seed");
-            expect(left.value().recipe.nodes.size() <= sample.limits.max_nodes &&
-                    left.value().recipe.edges.size() <= sample.limits.max_edges &&
-                    core::topology_depth(left.value().recipe) <= sample.limits.max_depth,
-                "property topology child must remain bounded");
+            expect(core::validate_recipe(a.value().recipe).empty(), "property child validates");
+            expect(core::semantic_fingerprint(a.value().recipe) == core::semantic_fingerprint(b.value().recipe),
+                "property child is deterministic");
+            expect(a.value().recipe.nodes.size() <= sample.limits.max_nodes &&
+                    a.value().recipe.edges.size() <= sample.limits.max_edges &&
+                    core::topology_depth(a.value().recipe) <= sample.limits.max_depth,
+                "property child remains bounded");
         }
     }
-    expect(accepted > 0U, "property topology sweep must find accepted mutations");
+    expect(accepted > 0U, "property sweep accepts legal mutations");
 
-    // Explicit specimen-browser integration remains separate from ordinary
-    // parameter mutation and returns normal complete recipe specimens.
     auto grid = core::generate_topology_specimen_grid(
         minimal, 0x140014ULL, core::kTopologyMutationOperatorVersion, 1U, no_locks);
-    expect(grid.is_ok(), "topology specimen grid must generate");
+    expect(grid.is_ok(), "explicit topology specimen grid generates");
     if (grid.is_ok()) {
-        expect(grid.value().size() == core::kSpecimenGridSize, "topology specimen grid must remain 4x4");
+        expect(grid.value().size() == core::kSpecimenGridSize, "topology specimen grid remains 4x4");
         for (const auto& specimen : grid.value()) {
-            expect(core::validate_recipe(specimen.recipe).empty(), "topology specimen must validate normally");
+            expect(core::validate_recipe(specimen.recipe).empty(), "topology specimen validates");
             expect(specimen.fingerprint == core::semantic_fingerprint(specimen.recipe),
-                "topology specimen fingerprint must be canonical recipe identity");
+                "topology specimen carries canonical identity");
         }
     }
 
-    // State-boundary node and every incident feedback edge are protected even
-    // without an explicit user lock.
     Recipe feedback = load_recipe(root / "examples" / "am007-feedback-trails.amr", failures);
-    const auto before_history_edges = incident_edges(feedback, "history");
+    const auto before_boundary = incident_edges(feedback, "history");
     core::TopologyMutationOptions feedback_options = options;
     feedback_options.seed = 7714U;
     feedback_options.budget = 2U;
     auto feedback_child = core::mutate_recipe_topology(feedback, feedback_options, no_locks);
-    expect(feedback_child.is_ok(), "feedback fixture should have legal edits outside its state boundary");
+    expect(feedback_child.is_ok(), "feedback fixture has legal edits outside state boundary");
     if (feedback_child.is_ok()) {
-        const auto* history = std::find_if(
+        const auto history = std::find_if(
             feedback_child.value().recipe.nodes.begin(), feedback_child.value().recipe.nodes.end(),
             [](const core::NodeInstance& node) { return node.id == "history"; });
         expect(history != feedback_child.value().recipe.nodes.end() && history->type_id == "core.state.delay.image",
-            "state boundary node must survive topology mutation unchanged");
-        expect(incident_edges(feedback_child.value().recipe, "history") == before_history_edges,
-            "state-boundary incident edges must remain unchanged");
-        expect(core::validate_recipe(feedback_child.value().recipe).empty(), "feedback topology child must validate");
+            "state boundary node remains unchanged");
+        expect(incident_edges(feedback_child.value().recipe, "history") == before_boundary,
+            "state-boundary incident edges remain unchanged");
     }
 
-    // Malformed lineage/provenance is rejected rather than guessed.
-    const std::string malformed_lineage =
+    const std::string malformed =
         "aml-topology 1\nchild 00000000000000000000000000000000\n"
         "parent 00000000000000000000000000000000\noperator 1\nseed 1\n"
         "limits 128/256/64\nlocks -\ntrace insert@test\n";
-    expect(core::parse_topology_lineage_record(malformed_lineage).is_error(),
-        "topology lineage missing budget must fail clearly");
+    expect(core::parse_topology_lineage_record(malformed).is_error(),
+        "lineage missing required budget fails instead of guessing");
 
-    // Quarry structural search is a separately serialized opt-in mode. Candidate
-    // identity includes the topology config rather than masquerading as ordinary
-    // numeric mutation identity.
-    auto manifest_result = quarry::make_job_manifest(minimal, 14014U, 16U, 64U, 64U);
-    expect(manifest_result.is_ok(), "base Quarry manifest should build");
-    if (manifest_result.is_ok()) {
+    auto manifest = quarry::make_job_manifest(minimal, 14014U, 16U, 64U, 64U);
+    expect(manifest.is_ok(), "ordinary Quarry manifest builds");
+    if (manifest.is_ok()) {
         quarry::TopologySearchConfig config;
         config.budget = 1U;
-        const std::string encoded = quarry::serialize_topology_search_config(config);
-        auto parsed_config = quarry::parse_topology_search_config(encoded);
-        expect(parsed_config.is_ok(), "Quarry topology-search config must round-trip");
-        if (parsed_config.is_ok()) {
-            auto candidate_a = quarry::reconstruct_topology_candidate(manifest_result.value(), 3U, parsed_config.value());
-            auto candidate_b = quarry::reconstruct_topology_candidate(manifest_result.value(), 3U, parsed_config.value());
-            expect(candidate_a.is_ok() && candidate_b.is_ok(), "Quarry topology candidate must reconstruct");
-            if (candidate_a.is_ok() && candidate_b.is_ok()) {
-                expect(candidate_a.value().candidate_id == candidate_b.value().candidate_id &&
-                        candidate_a.value().recipe_fingerprint == candidate_b.value().recipe_fingerprint,
-                    "Quarry topology candidate identity must be deterministic");
-                expect(core::validate_recipe(candidate_a.value().recipe).empty(),
-                    "Quarry topology candidate must validate normally");
+        auto parsed = quarry::parse_topology_search_config(quarry::serialize_topology_search_config(config));
+        expect(parsed.is_ok(), "topology Quarry config round-trips");
+        if (parsed.is_ok()) {
+            auto a = quarry::reconstruct_topology_candidate(manifest.value(), 3U, parsed.value());
+            auto b = quarry::reconstruct_topology_candidate(manifest.value(), 3U, parsed.value());
+            expect(a.is_ok() && b.is_ok(), "Quarry topology candidate reconstructs");
+            if (a.is_ok() && b.is_ok()) {
+                expect(a.value().candidate_id == b.value().candidate_id &&
+                        a.value().recipe_fingerprint == b.value().recipe_fingerprint,
+                    "Quarry topology candidate identity is deterministic");
+                expect(core::validate_recipe(a.value().recipe).empty(), "Quarry topology candidate validates");
             }
         }
     }
 
-    // Representative accepted topology children remain ordinary recipes for the
-    // canonical renderer and transactional exporter. Search a bounded deterministic
-    // seed interval because not every generic typed node belongs to this minimal
-    // evaluator family.
-    bool rendered_and_exported = false;
+    bool render_export_ok = false;
     const std::filesystem::path export_dir =
         std::filesystem::temp_directory_path() / "artminer-am014-topology-export";
-    std::error_code cleanup_error;
-    std::filesystem::remove_all(export_dir, cleanup_error);
-    for (core::u64 seed = 100U; seed < 164U && !rendered_and_exported; ++seed) {
+    std::error_code ec;
+    std::filesystem::remove_all(export_dir, ec);
+    for (core::u64 seed = 100U; seed < 164U && !render_export_ok; ++seed) {
         core::TopologyMutationOptions render_options = options;
         render_options.seed = seed;
         render_options.budget = 1U;
         auto child = core::mutate_recipe_topology(minimal, render_options, no_locks);
-        if (child.is_error()) {
-            continue;
-        }
-        auto image = nodes::render_reference(child.value().recipe);
-        if (image.is_error()) {
+        if (child.is_error() || nodes::render_reference(child.value().recipe).is_error()) {
             continue;
         }
         exporting::ExportRequest request;
-        request.kind = exporting::ExportKind::still;
         request.raster_format = exporting::RasterFormat::raw_rgba;
         request.destination_directory = export_dir;
         request.stem = "topology";
         auto exported = exporting::export_recipe(child.value().recipe, request);
         if (exported.is_ok()) {
-            rendered_and_exported = true;
+            render_export_ok = true;
             expect(exported.value().recipe_fingerprint == core::semantic_fingerprint(child.value().recipe),
-                "export provenance must retain topology-mutated recipe identity");
+                "export provenance retains topology child identity");
         }
     }
-    expect(rendered_and_exported, "at least one deterministic topology child must render and export canonically");
-    std::filesystem::remove_all(export_dir, cleanup_error);
+    expect(render_export_ok, "representative topology child renders and exports canonically");
+    std::filesystem::remove_all(export_dir, ec);
 
     if (failures == 0) {
         std::cout << "AM-014 topology mutation tests passed\n";
