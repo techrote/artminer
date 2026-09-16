@@ -31,6 +31,7 @@ struct MetricError final {
 };
 
 [[nodiscard]] const std::vector<std::string>& supported_metric_names();
+[[nodiscard]] const std::vector<std::string>& default_still_metric_names();
 [[nodiscard]] bool is_supported_metric(std::string_view name) noexcept;
 
 // Computes deterministic transparent metrics from canonical RGBA8 frames. The
