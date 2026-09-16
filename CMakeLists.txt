@@ -40,25 +40,34 @@ function(artminer_apply_warnings target_name)
     endif()
 endfunction()
 
+# Domain-neutral deterministic substrate. Downstream forks can link this target
+# with their own node catalog while leaving ArtMiner's catalog/application above it.
+add_library(artminer_engine STATIC
+    src/core/graph.cpp
+    src/core/hash.cpp
+    src/core/node_registry.cpp
+    src/core/prng.cpp
+    src/core/recipe.cpp
+)
+target_include_directories(artminer_engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+artminer_apply_warnings(artminer_engine)
+
 add_library(artminer_core STATIC
     src/core/animation.cpp
     src/core/breeding.cpp
+    src/core/builtin_node_registry.cpp
     src/core/glyph_nodes.cpp
-    src/core/graph.cpp
     src/core/growth_nodes.cpp
-    src/core/hash.cpp
     src/core/lineage_record.cpp
     src/core/material_nodes.cpp
-    src/core/node_registry.cpp
     src/core/parameter_locks_lineage.cpp
-    src/core/prng.cpp
-    src/core/recipe.cpp
     src/core/specimen_browser.cpp
     src/core/topology_lineage.cpp
     src/core/topology_mutation.cpp
     src/core/topology_specimen.cpp
 )
 target_include_directories(artminer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(artminer_core PUBLIC artminer_engine)
 artminer_apply_warnings(artminer_core)
 
 add_library(artminer_nodes STATIC
@@ -143,6 +152,10 @@ target_link_libraries(ArtMiner PRIVATE
 target_compile_definitions(ArtMiner PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMiner)
 
+add_executable(ArtMinerEngineForkTests tests/engine_fork_readiness_test.cpp)
+target_link_libraries(ArtMinerEngineForkTests PRIVATE artminer_engine)
+artminer_apply_warnings(ArtMinerEngineForkTests)
+
 add_executable(ArtMinerTests tests/test_main.cpp)
 target_link_libraries(ArtMinerTests PRIVATE artminer_core artminer_nodes artminer_platform_windows artminer_export_windows artminer_gpu_windows)
 target_compile_definitions(ArtMinerTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
@@ -219,6 +232,7 @@ target_compile_definitions(ArtMinerReleaseBenchmark PRIVATE UNICODE _UNICODE WIN
 artminer_apply_warnings(ArtMinerReleaseBenchmark)
 
 enable_testing()
+add_test(NAME artminer.engine-fork-readiness COMMAND ArtMinerEngineForkTests)
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
 add_test(NAME artminer.specimen-browser COMMAND ArtMinerSpecimenTests)
