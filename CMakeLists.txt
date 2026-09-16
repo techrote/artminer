@@ -42,6 +42,7 @@ endfunction()
 
 add_library(artminer_core STATIC
     src/core/graph.cpp
+    src/core/growth_nodes.cpp
     src/core/hash.cpp
     src/core/node_registry.cpp
     src/core/prng.cpp
@@ -52,6 +53,7 @@ target_include_directories(artminer_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src
 artminer_apply_warnings(artminer_core)
 
 add_library(artminer_nodes STATIC
+    src/nodes/growth_evaluator.cpp
     src/nodes/static_evaluator.cpp
 )
 target_include_directories(artminer_nodes PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -134,10 +136,21 @@ target_link_libraries(ArtMinerSpecimenTests PRIVATE
 target_compile_definitions(ArtMinerSpecimenTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerSpecimenTests)
 
+add_executable(ArtMinerGrowthTests
+    tests/growth_systems_test.cpp
+)
+target_link_libraries(ArtMinerGrowthTests PRIVATE
+    artminer_core
+    artminer_nodes
+)
+target_compile_definitions(ArtMinerGrowthTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerGrowthTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
 add_test(NAME artminer.specimen-browser COMMAND ArtMinerSpecimenTests)
+add_test(NAME artminer.growth COMMAND ArtMinerGrowthTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
@@ -152,3 +165,7 @@ add_test(
     NAME artminer.render.reference
     COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am003-fbm-warp.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am003-fbm-warp.png")
 set_tests_properties(artminer.render.reference PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
+add_test(
+    NAME artminer.render.growth
+    COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-reaction-diffusion.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-growth.png")
+set_tests_properties(artminer.render.growth PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
