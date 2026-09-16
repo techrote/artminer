@@ -179,5 +179,8 @@ add_test(
 set_tests_properties(artminer.render.reference PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
 add_test(
     NAME artminer.render.growth-tick
-    COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-walkers.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-walkers.png" --tick 12)
-set_tests_properties(artminer.render.growth-tick PROPERTIES PASS_REGULAR_EXPRESSION "tick 12")
+    COMMAND ${CMAKE_COMMAND}
+        "-DARTMINER_EXE=$<TARGET_FILE:ArtMiner>"
+        "-DGROWTH_RECIPE=${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-walkers.amr"
+        "-DOUTPUT_PNG=${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-walkers.png"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_growth_render.cmake")
