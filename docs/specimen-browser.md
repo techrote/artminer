@@ -40,21 +40,26 @@ Canonical thumbnail rendering is progressive. A small bounded worker pool may co
 
 The selected specimen uses the AM-004 D3D11 preview path. GPU-supported recipes are previewed on the accelerated path; unsupported graphs continue to use the explicit canonical CPU fallback.
 
-## History, editing and persistence
+## History, editing, persistence, and recovery
 
 Selecting a specimen or applying an explicit parameter edit pushes a complete recipe onto reversible in-memory history. Back/forward navigation only changes the history cursor; it never edits an entry. Creating a new child after navigating backward truncates the stale forward branch in conventional undo-history fashion.
 
 The parameter list is derived from node metadata and the selected recipe. Text edits are parsed against the declared parameter kind/domain and the entire edited recipe is validated before becoming history state.
 
-Selected recipes and favourites are persisted under the portable workspace:
+Selected recipes, favourites, and the current recovery snapshot are persisted under the portable workspace:
 
 ```text
 <workspace>/recipes/
 ├── saved/<semantic-fingerprint>.amr
-└── favourites/<semantic-fingerprint>.amr
+├── favourites/<semantic-fingerprint>.amr
+└── recovery/current.amr
 ```
 
-Writes use a same-directory temporary file followed by `MoveFileExW` replacement with write-through. Favourites are reloaded and validated on startup. If no `--open` recipe is supplied, the first persisted favourite in fingerprint order is restored as the current parent. History itself is intentionally not persisted into recipe semantics.
+Writes use a same-directory temporary file followed by `MoveFileExW` replacement with write-through. Favourites are reloaded and validated on startup. AM-015 also snapshots the current selected recipe after adoption or history movement. This recovery file contains only a normal canonical recipe; thumbnail state, locks, UI layout, and history branches are not made semantic or authoritative.
+
+Normal startup precedence is explicit `--open`, then a valid recovery snapshot, then the first persisted favourite in fingerprint order, then an empty browser. Malformed, oversized, invalid-UTF-8, or graph-invalid recovery data is reported and ignored rather than guessed. A subsequent valid selection can replace it atomically. History itself remains in-memory only.
+
+Browser shutdown joins the bounded thumbnail worker pool and drains already-posted completion objects. This closes the shutdown lifetime window without changing grid ordering or recipe identity.
 
 ## Interaction
 
