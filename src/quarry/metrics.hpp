@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,7 +32,27 @@ struct MetricError final {
 };
 
 [[nodiscard]] const std::vector<std::string>& supported_metric_names();
-[[nodiscard]] const std::vector<std::string>& default_still_metric_names();
+
+[[nodiscard]] inline const std::vector<std::string>& default_still_metric_names() {
+    static const std::vector<std::string> names{
+        "entropy",
+        "edge_density",
+        "connected_components",
+        "component_mean",
+        "component_max",
+        "symmetry_bilateral",
+        "symmetry_rotational",
+        "dominant_frequency",
+        "palette_utilisation",
+        "empty_space_ratio",
+        "repetition",
+        "tile_seam_error",
+        "directional_bias",
+        "region_diversity",
+    };
+    return names;
+}
+
 [[nodiscard]] bool is_supported_metric(std::string_view name) noexcept;
 
 // Computes deterministic transparent metrics from canonical RGBA8 frames. The
