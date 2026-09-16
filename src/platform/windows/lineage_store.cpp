@@ -19,6 +19,18 @@ namespace {
     return LineageStoreError{code, std::move(message), system_error};
 }
 
+[[nodiscard]] bool valid_fingerprint(const std::string_view value) noexcept {
+    if (value.size() != 32U) {
+        return false;
+    }
+    for (const char ch : value) {
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] core::Result<void, LineageStoreError> write_text_atomic(
     const std::filesystem::path& target,
     const std::string_view text) {
@@ -154,12 +166,13 @@ namespace {
 core::Result<std::filesystem::path, LineageStoreError> save_lineage_record(
     const std::filesystem::path& recipes_root,
     const core::LineageRecord& record) {
-    if (record.child_fingerprint.empty()) {
-        return core::Result<std::filesystem::path, LineageStoreError>::failure(
-            make_error(LineageStoreErrorCode::invalid_record, L"lineage record has no child fingerprint"));
-    }
-    const std::filesystem::path path = record_path(recipes_root, record.child_fingerprint);
     const std::string text = core::serialize_lineage_record(record);
+    auto validated = core::parse_lineage_record(text);
+    if (validated.is_error()) {
+        return core::Result<std::filesystem::path, LineageStoreError>::failure(
+            make_error(LineageStoreErrorCode::invalid_record, L"cannot persist malformed lineage record"));
+    }
+    const std::filesystem::path path = record_path(recipes_root, validated.value().child_fingerprint);
     auto written = write_text_atomic(path, text);
     if (written.is_error()) {
         return core::Result<std::filesystem::path, LineageStoreError>::failure(written.error());
@@ -235,6 +248,10 @@ core::Result<std::vector<StoredLineageSpecimen>, LineageStoreError> load_lineage
 core::Result<StoredLineageSpecimen, LineageStoreError> load_lineage_specimen(
     const std::filesystem::path& recipes_root,
     const std::string_view fingerprint) {
+    if (!valid_fingerprint(fingerprint)) {
+        return core::Result<StoredLineageSpecimen, LineageStoreError>::failure(
+            make_error(LineageStoreErrorCode::invalid_record, L"lineage specimen lookup fingerprint is malformed"));
+    }
     const std::filesystem::path path = specimen_path(recipes_root, fingerprint);
     std::error_code error;
     if (!std::filesystem::exists(path, error)) {
