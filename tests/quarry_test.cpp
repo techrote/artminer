@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -135,10 +136,12 @@ void compare_results(
 }
 
 void test_worker_order_resume_cache_and_corruption() {
+    constexpr artminer::core::u64 kPopulation = 64U;
     const std::filesystem::path root = fresh_root();
+    const std::vector<std::string> selected_metrics{
+        "entropy", "edge_density", "symmetry_bilateral", "palette_utilisation", "region_diversity"};
     auto manifest_result = artminer::quarry::make_job_manifest(
-        base_recipe(), 0x123456789abcdef0ULL, 12U, 8U, 8U, 0.65,
-        {"entropy", "edge_density", "symmetry_bilateral", "palette_utilisation", "region_diversity"});
+        base_recipe(), 0x123456789abcdef0ULL, kPopulation, 8U, 8U, 0.65, selected_metrics);
     expect(manifest_result.is_ok(), "Quarry manifest should be constructible");
     if (manifest_result.is_error()) {
         return;
@@ -156,6 +159,7 @@ void test_worker_order_resume_cache_and_corruption() {
     auto four_results = artminer::quarry::read_results(four);
     expect(one_results.is_ok() && four_results.is_ok(), "worker-count results should read");
     if (one_results.is_ok() && four_results.is_ok()) {
+        expect(one_results.value().size() == kPopulation, "substantial test population should be fully committed");
         compare_results(one_results.value(), four_results.value(), "worker-count invariance");
     }
 
@@ -173,6 +177,8 @@ void test_worker_order_resume_cache_and_corruption() {
         });
     expect(partial.is_ok() && partial.value().cancelled && !partial.value().complete,
            "cancelled Quarry should leave a resumable committed prefix");
+    expect(partial.is_ok() && partial.value().committed == 2U,
+           "cancellation should stop at the completed bounded two-worker batch");
     auto resumed = artminer::quarry::run_job(cancelled, 3U);
     auto baseline = artminer::quarry::run_job(uninterrupted, 4U);
     expect(resumed.is_ok() && resumed.value().complete, "cancelled Quarry should resume to completion");
@@ -185,13 +191,42 @@ void test_worker_order_resume_cache_and_corruption() {
     }
 
     const auto paths = artminer::quarry::derive_job_paths(one);
-    bool first_hit = false;
+    std::error_code ignored;
+    std::filesystem::remove_all(paths.cache_directory, ignored);
+    std::filesystem::create_directories(paths.cache_directory, ignored);
+    bool first_hit = true;
     bool second_hit = false;
     auto first_candidate = artminer::quarry::evaluate_candidate(manifest, 0U, paths.cache_directory, &first_hit);
     auto second_candidate = artminer::quarry::evaluate_candidate(manifest, 0U, paths.cache_directory, &second_hit);
-    expect(first_candidate.is_ok() && second_candidate.is_ok(), "cache candidate evaluations should succeed");
-    expect(second_hit, "second candidate evaluation should hit disposable cache");
-    std::error_code ignored;
+    expect(first_candidate.is_ok() && !first_hit, "first candidate evaluation after cache deletion should miss");
+    expect(second_candidate.is_ok() && second_hit, "second candidate evaluation should hit disposable cache");
+
+    std::filesystem::path cache_entry;
+    for (const auto& entry : std::filesystem::directory_iterator(paths.cache_directory)) {
+        if (entry.is_regular_file()) {
+            cache_entry = entry.path();
+            break;
+        }
+    }
+    expect(!cache_entry.empty(), "candidate evaluation should create a disposable cache entry");
+    if (!cache_entry.empty()) {
+        std::ofstream stale(cache_entry, std::ios::binary | std::ios::trunc);
+        stale << "stale incompatible cache\n";
+    }
+    bool stale_hit = true;
+    auto after_stale = artminer::quarry::evaluate_candidate(manifest, 0U, paths.cache_directory, &stale_hit);
+    expect(after_stale.is_ok() && !stale_hit, "malformed or stale cache entry should be a safe miss");
+    if (second_candidate.is_ok() && after_stale.is_ok()) {
+        expect(second_candidate.value().candidate_id == after_stale.value().candidate_id,
+               "stale cache must not change candidate identity");
+        expect(second_candidate.value().metrics.size() == after_stale.value().metrics.size(),
+               "stale cache metric count");
+        for (std::size_t index = 0U; index < second_candidate.value().metrics.size(); ++index) {
+            expect(second_candidate.value().metrics[index].value == after_stale.value().metrics[index].value,
+                   "stale cache must not change metric values");
+        }
+    }
+
     std::filesystem::remove_all(paths.cache_directory, ignored);
     std::filesystem::create_directories(paths.cache_directory, ignored);
     bool after_delete_hit = true;
@@ -211,6 +246,24 @@ void test_worker_order_resume_cache_and_corruption() {
     auto bounded = artminer::quarry::read_results(one, 3U);
     expect(bounded.is_ok() && bounded.value().size() == 3U,
            "result browsing should support an explicit bounded prefix rather than requiring the whole population");
+
+    const std::filesystem::path incompatible = root / "incompatible.amq";
+    auto incompatible_manifest = artminer::quarry::make_job_manifest(
+        base_recipe(), 0x123456789abcdef1ULL, kPopulation, 8U, 8U, 0.65, selected_metrics);
+    expect(incompatible_manifest.is_ok(), "incompatible comparison manifest should be constructible");
+    if (incompatible_manifest.is_ok()) {
+        expect(artminer::quarry::write_job_manifest(incompatible, incompatible_manifest.value()).is_ok(),
+               "write incompatible comparison manifest");
+        const auto incompatible_paths = artminer::quarry::derive_job_paths(incompatible);
+        std::filesystem::copy_file(paths.checkpoint, incompatible_paths.checkpoint,
+                                   std::filesystem::copy_options::overwrite_existing, ignored);
+        std::filesystem::copy_file(paths.results, incompatible_paths.results,
+                                   std::filesystem::copy_options::overwrite_existing, ignored);
+        auto mismatched = artminer::quarry::inspect_job(incompatible);
+        expect(mismatched.is_error() &&
+                   mismatched.error().code == artminer::quarry::QuarryErrorCode::checkpoint_incompatible,
+               "checkpoint from a different manifest identity should fail explicitly");
+    }
 
     {
         std::ofstream corrupt(paths.checkpoint, std::ios::binary | std::ios::trunc);
