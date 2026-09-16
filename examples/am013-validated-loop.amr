@@ -1,0 +1,18 @@
+# Analytic fixed-tick loop. tick 32 is exactly phase-equivalent to tick 0;
+# AM-013 also validates the 0->1 and 32->33 transition continuity.
+amr 1
+evaluator 1
+seed 13016
+render 96 64 "reference"
+node "phase" "core.loop.phase" 1
+param "phase" "loop_length" i64 32
+param "phase" "phase_offset" f64 0
+node "wave" "core.loop.wave_image" 1
+param "wave" "axis" enum "x"
+param "wave" "spatial_cycles" i64 5
+param "wave" "phase_cycles" i64 1
+param "wave" "contrast" f64 1
+edge "phase" "phase" "wave" "phase"
+output "main" "wave" "value"
+meta "example.family" "am013-validated-loop"
+meta "loop.native-length" "32"
