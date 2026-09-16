@@ -45,6 +45,8 @@ Local recipe text is treated as untrusted input. File-backed recipe loading is b
 
 Recipe, export and topology/evaluator allocation math continues to use checked byte/count helpers where dimensions can multiply. Programmatically constructed oversized recipes are rejected by `validate_recipe` before graph maps/adjacency structures are allocated.
 
+AM-015 also tightened the contract boundary between validation and execution for dependent parameters. `core.scalar.quantize` now rejects `maximum <= minimum` during normal recipe validation rather than accepting the recipe and failing only when the evaluator runs. The final benchmark exposed this gap because independent parameter mutation could place two individually in-domain values into an illegal relationship. Parameter-mutation operator version 1 now keeps its original attempt as attempt zero, then uses at most 31 additional deterministically derived attempts only when normal recipe validation rejects the candidate. Existing successful v1 mutation identities therefore remain unchanged; seeds that previously produced no valid child now follow a bounded, reproducible recovery path rather than failing later during thumbnail or Quarry evaluation.
+
 Export filename stems are a restricted portable token and reject path separators, `.`/`..`, absolute/path-like content and traversal. Export sets are created transactionally in same-parent staging and published only after completion. Existing destinations are never silently overwritten.
 
 Quarry manifests/checkpoints/caches keep their earlier bounded-read, identity and checksum contracts. Cache corruption is disposable and never authoritative. Checkpoint/resume failures are explicit; a malformed or mismatched checkpoint is not silently interpreted as another job.
@@ -82,17 +84,28 @@ The D3D11 preview remains noncanonical and already supports device recreation/fa
 - transactional PNG export;
 - eight 96×96 Quarry candidate evaluations.
 
-CI executes the benchmark after all tests. Timings vary with runner load, CPU generation, storage and security software, so they are observations rather than pass/fail thresholds. The first accepted AM-015 CI measurements are recorded below after final-head CI.
+CI executes the benchmark after all tests. Timings vary with runner load, CPU generation, storage and security software, so they are observations rather than pass/fail thresholds.
 
-### Accepted final-head CI measurements
+### Accepted AM-015 CI measurements
 
-Pending final-head CI measurement before merge.
+The accepted implementation-head measurements came from GitHub Actions run `35089439612` on 2026-09-16, using the hosted `windows-2025-vs2026` image version `20260907.229.1` (Windows Server 2025, build 26100), x64 Release. They characterize hosted-runner CPU/storage throughput only and are not physical-GPU qualification data.
+
+| Workload | Observed wall-clock |
+| --- | ---: |
+| canonical static reference preview | 39.1746 ms |
+| deterministic 16×96×96 mutation grid | 91.6799 ms |
+| reaction-diffusion reference render | 415.317 ms |
+| particle/feedback tick 12 | 1.3884 ms |
+| transactional PNG export | 50.8892 ms |
+| Quarry 8×96×96 candidates | 78.4 ms |
+
+The benchmark evidence artifact was published by that run as `ArtMiner-1.0.0-release-benchmark`. The same run successfully staged, smoke-tested and published `ArtMiner-1.0.0-win-x64.zip`; the uploaded workflow artifact ZIP had SHA-256 `0aaf828db2a450fe254cff5bd7f783eb21128117aae8315229cd00faf5af4494`.
 
 ## 60 Hz UI responsiveness target
 
 The 60 Hz target applies to interactive UI/preview responsiveness where hardware permits; it is not a promise that canonical CPU evaluation of every recipe completes in 16.67 ms. The browser keeps preview presentation on the UI timer while mutation thumbnails render in a bounded background pool. The status line exposes preview path, presented frame count and last-present milliseconds so a physical Windows system can distinguish GPU presentation latency from canonical CPU generation throughput.
 
-GitHub-hosted Windows CI is useful for correctness and CPU throughput but is not a representative physical-GPU qualification environment. The release therefore does not claim a hardware-specific 60 Hz qualification from CI alone. A narrow post-v1 characterization issue should track measurements on named physical GPUs without changing canonical semantics.
+GitHub-hosted Windows CI is useful for correctness and CPU throughput but is not a representative physical-GPU qualification environment. The release therefore does not claim a hardware-specific 60 Hz qualification from CI alone. Follow-up issue #32 records the required named-hardware characterization without weakening canonical semantics or conflating presentation with evaluation throughput.
 
 ## Release audit disposition
 
@@ -100,7 +113,8 @@ AM-015 audited the requested release surfaces with these dispositions:
 
 | Surface | Disposition |
 | --- | --- |
-| Recipe parsing / evaluator dispatch | Hardened source/structure limits; unsupported versions remain explicit errors; canonical semantics unchanged. |
+| Recipe parsing / evaluator dispatch | Hardened source/structure limits; unsupported versions remain explicit errors; dependent quantize legality is now rejected by the public validator before evaluator dispatch; canonical valid-recipe rendering semantics are unchanged. |
+| Specimen / Quarry parameter mutation | Validator-gated, bounded deterministic retry prevents independently mutated dependent parameters from surviving as execution-invalid children. Attempt zero preserves every previously successful v1 child identity. |
 | UI/model separation | Recipe remains authoritative; preview/thumbnails derived; recovery contains canonical recipe only. |
 | Stateful replay | Existing fixed-tick reset/replay/cache-disposal regressions retained. |
 | Quarry resume/cache | Existing checksummed bounded checkpoint/cache contracts retained; cache non-authoritative. |
@@ -115,4 +129,6 @@ No known release-blocking defect from this audit is intentionally left undocumen
 
 ## Verification
 
-Release acceptance requires the strict Windows `/W4 /WX` build and complete CTest suite to pass on the final PR head, followed by successful benchmark and package smoke steps. AM-015 adds regression coverage for malformed UTF-8, raw NUL, oversized source/files, direct parser resource-limit classification, programmatic graph limits, recovery round-trip/corruption handling and export traversal rejection.
+Release acceptance requires the strict Windows `/W4 /WX` build and complete CTest suite to pass on the final PR head, followed by successful benchmark and package smoke steps. The accepted implementation-head run passed all 28 CTest checks, the benchmark, staged portable smoke tests and both artifact-upload steps. The final documentation-only head is required to repeat that complete CI path before merge.
+
+AM-015 regression coverage includes malformed UTF-8, raw NUL, oversized source/files, direct parser resource-limit classification, programmatic graph limits, recovery round-trip/corruption handling, export traversal rejection, and deterministic validation-safe mutation across dependent quantize parameters. The staged package smoke path verifies `--version`, workspace creation, recipe validation and a canonical headless PNG render using the exact packaged executable before archiving.
