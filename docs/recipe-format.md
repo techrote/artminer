@@ -16,9 +16,15 @@ Schema 1 accepts only recipe schema `1` and evaluator semantic version `1`. A no
 
 Unsupported semantic versions are rejected. They are never silently interpreted as the current version.
 
-## Encoding and lexical rules
+## Encoding, lexical, and release input limits
 
-Files are UTF-8 text. A UTF-8 BOM is accepted but canonical serialization never emits one.
+Files are strict UTF-8 text. A UTF-8 BOM is accepted but canonical serialization never emits one. Malformed UTF-8 and raw NUL bytes are rejected.
+
+ArtMiner 1.0 bounds a recipe source before semantic parsing: at most **8 MiB** total and **64 KiB** for one logical source line. The schema-1 graph is additionally bounded to **4,096 nodes**, **65,536 parameters total**, **16,384 edges**, **1,024 outputs**, and **4,096 metadata records**. File-backed loaders apply the byte bound before allocating the file buffer, and `parse_recipe` enforces the same contract for in-memory callers. Programmatically constructed recipes are subject to the same graph limits during validation before graph-work structures are allocated.
+
+These are release resource-safety limits, not new render semantics. A future compatible implementation may only relax them deliberately; it must never silently reinterpret a recipe that exceeds a semantic version it understands.
+
+Lexical rules:
 
 - one logical record per line;
 - spaces and tabs separate tokens;
@@ -42,7 +48,7 @@ seed <uint64>
 render <width> <height> <quality>
 ```
 
-Valid render dimensions are `1..16384` in each axis and the only accepted quality token is `reference`. Render settings are semantic even when a particular execution surface imposes a tighter resource limit.
+Valid render dimensions are `1..16384` in each axis and the only accepted quality token is `reference`. Render settings are semantic even when a particular execution surface imposes a tighter resource limit. Image byte counts are checked for overflow before allocation.
 
 ## Nodes
 
@@ -216,4 +222,4 @@ ArtMiner.exe recipe inspect path\to\recipe.amr
 
 `validate` parses, validates, and prints the semantic fingerprint. `inspect` additionally prints version, seed, render, and graph-count information.
 
-Both paths are headless and use the same core parser/registry/validator as the application.
+Both paths are headless and use the same bounded UTF-8 reader, core parser, registry and validator as the application.
