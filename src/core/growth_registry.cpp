@@ -1,5 +1,6 @@
 #include "core/graph.hpp"
 
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
