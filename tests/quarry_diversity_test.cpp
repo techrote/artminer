@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "core/recipe.hpp"
@@ -110,12 +111,15 @@ void test_dedupe_clustering_ranking_and_projection() {
     dedupe_settings.metric_distance_threshold = 0.02;
     dedupe_settings.image_mean_absolute_threshold = 0.01;
     auto dedupe = artminer::quarry::deduplicate_candidates(candidates, model, dedupe_settings);
-    expect(dedupe.is_ok(), "dedupe should evaluate");
-    if (dedupe.is_ok()) {
+    auto dedupe_repeat = artminer::quarry::deduplicate_candidates(candidates, model, dedupe_settings);
+    expect(dedupe.is_ok() && dedupe_repeat.is_ok(), "dedupe should evaluate repeatedly");
+    if (dedupe.is_ok() && dedupe_repeat.is_ok()) {
         expect(dedupe.value().size() == 3U, "near duplicate should be hidden from representative browsing only");
         expect(dedupe.value()[0].representative == 0U && dedupe.value()[0].members.size() == 2U &&
                    dedupe.value()[0].members[1] == 1U,
                "dedupe representative and member ordering should be stable by candidate index");
+        expect(dedupe.value()[0].members == dedupe_repeat.value()[0].members,
+               "same dedupe settings should reproduce the same grouping");
     }
 
     std::vector<artminer::quarry::CandidateFeatures> corners{
@@ -129,8 +133,8 @@ void test_dedupe_clustering_ranking_and_projection() {
     expect(clusters.is_ok() && clusters_repeat.is_ok(), "deterministic clustering should evaluate repeatedly");
     if (clusters.is_ok() && clusters_repeat.is_ok()) {
         expect(clusters.value().size() == 2U && clusters.value()[0].representative == 0U &&
-                   clusters.value()[1].representative == 3U,
-               "farthest-first clusters and centroid representatives should use stable tie-breaking");
+                   clusters.value()[1].representative == 2U,
+               "weighted farthest-first clusters and centroid representatives should use stable tie-breaking");
         expect(clusters.value()[0].members == clusters_repeat.value()[0].members &&
                    clusters.value()[1].members == clusters_repeat.value()[1].members,
                "repeated clustering should be byte-order stable at the semantic level");
