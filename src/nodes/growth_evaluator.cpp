@@ -210,14 +210,9 @@ struct Tip final {
     const i64 states = integer_parameter(node, "states");
     const double initial_fill = real_parameter(node, "initial_fill");
     const i64 birth_min = integer_parameter(node, "birth_min");
-    const i64 birth_max = integer_parameter(node, "birth_max");
+    const i64 birth_max = (std::min)(i64{8}, birth_min + integer_parameter(node, "birth_span"));
     const i64 survive_min = integer_parameter(node, "survive_min");
-    const i64 survive_max = integer_parameter(node, "survive_max");
-    if (birth_min > birth_max || survive_min > survive_max) {
-        return core::Result<GrowthField, GrowthError>::failure(make_error(
-            GrowthErrorCode::invalid_parameter,
-            "cellular automaton rule minima must not exceed their maxima"));
-    }
+    const i64 survive_max = (std::min)(i64{8}, survive_min + integer_parameter(node, "survive_span"));
     const bool moore = enum_parameter(node, "neighbourhood") == "moore";
     const bool repeat = enum_parameter(node, "boundary") == "repeat";
     const u64 seed = node_seed(recipe, node);
@@ -334,11 +329,6 @@ struct Tip final {
     const i64 tick = integer_parameter(node, "tick");
     const i64 initial_tips = integer_parameter(node, "initial_tips");
     const i64 max_tips = integer_parameter(node, "max_tips");
-    if (max_tips < initial_tips) {
-        return core::Result<GrowthField, GrowthError>::failure(make_error(
-            GrowthErrorCode::invalid_parameter,
-            "branching max_tips must be greater than or equal to initial_tips"));
-    }
     auto work = core::checked_multiply_u64(static_cast<u64>(tick), static_cast<u64>(max_tips));
     if (work.is_error() || work.value() > kMaxBranchTipUpdates) {
         return core::Result<GrowthField, GrowthError>::failure(make_error(
