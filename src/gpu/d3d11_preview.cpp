@@ -217,13 +217,13 @@ float4 artminer_palette4_nearest(float value, float4 c0, float4 c1, float4 c2, f
 }
 
 uint artminer_bayer4(uint2 pixel) {
-    static const uint matrix[16] = {
+    static const uint bayer_values[16] = {
         0U, 8U, 2U, 10U,
         12U, 4U, 14U, 6U,
         3U, 11U, 1U, 9U,
         15U, 7U, 13U, 5U
     };
-    return matrix[(pixel.y & 3U) * 4U + (pixel.x & 3U)];
+    return bayer_values[(pixel.y & 3U) * 4U + (pixel.x & 3U)];
 }
 
 uint artminer_bayer8(uint2 pixel) {
