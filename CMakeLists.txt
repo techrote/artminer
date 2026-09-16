@@ -214,6 +214,17 @@ target_link_libraries(ArtMinerQuarryTests PRIVATE
 target_compile_definitions(ArtMinerQuarryTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerQuarryTests)
 
+add_executable(ArtMinerQuarryThumbnailTests
+    tests/quarry_thumbnail_test.cpp
+)
+target_link_libraries(ArtMinerQuarryThumbnailTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_quarry
+)
+target_compile_definitions(ArtMinerQuarryThumbnailTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerQuarryThumbnailTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
@@ -223,6 +234,7 @@ add_test(NAME artminer.motion COMMAND ArtMinerMotionTests)
 add_test(NAME artminer.breeding-lineage COMMAND ArtMinerBreedingTests)
 add_test(NAME artminer.export COMMAND ArtMinerExportTests)
 add_test(NAME artminer.quarry COMMAND ArtMinerQuarryTests)
+add_test(NAME artminer.quarry-thumbnail COMMAND ArtMinerQuarryThumbnailTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
