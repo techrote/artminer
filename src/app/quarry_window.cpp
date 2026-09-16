@@ -94,7 +94,7 @@ void start_run(WindowState& state) {
     const std::filesystem::path manifest = state.manifest_path;
     state.running.store(true, std::memory_order_relaxed);
     set_status(state, L"Quarry running...");
-    state.worker = std::thread([&state, token, window, manifest]() {
+    state.worker = std::thread([token, window, manifest]() {
         auto completed = quarry::run_job(
             manifest,
             default_worker_count(),
@@ -113,7 +113,6 @@ void start_run(WindowState& state) {
             message->success = true;
             message->progress = completed.value();
         }
-        state.running.store(false, std::memory_order_relaxed);
         if (PostMessageW(window, kCompleteMessage, 0U, reinterpret_cast<LPARAM>(message)) == FALSE) {
             delete message;
         }
@@ -124,6 +123,17 @@ void cancel_run(WindowState& state) {
     if (state.cancellation != nullptr) {
         state.cancellation->cancel();
         set_status(state, L"Cancellation requested; finishing the current bounded worker batch...");
+    }
+}
+
+void discard_pending_worker_messages(const HWND window) {
+    MSG pending{};
+    while (PeekMessageW(&pending, window, kProgressMessage, kCompleteMessage, PM_REMOVE) != FALSE) {
+        if (pending.message == kProgressMessage) {
+            delete reinterpret_cast<quarry::JobProgress*>(pending.lParam);
+        } else if (pending.message == kCompleteMessage) {
+            delete reinterpret_cast<Completion*>(pending.lParam);
+        }
     }
 }
 
@@ -186,6 +196,7 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         if (state->worker.joinable()) {
             state->worker.join();
         }
+        state->running.store(false, std::memory_order_relaxed);
         if (complete != nullptr && complete->success) {
             std::wostringstream text;
             text << (complete->progress.complete ? L"Quarry complete: " : L"Quarry paused: ")
@@ -202,6 +213,8 @@ LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lp
         if (state->worker.joinable()) {
             state->worker.join();
         }
+        state->running.store(false, std::memory_order_relaxed);
+        discard_pending_worker_messages(window);
         DestroyWindow(window);
         return 0;
     case WM_DESTROY:
@@ -260,7 +273,9 @@ int run_quarry_application(const std::filesystem::path& manifest_path) {
         DispatchMessageW(&message);
     }
     if (state.worker.joinable()) {
-        state.cancellation->cancel();
+        if (state.cancellation != nullptr) {
+            state.cancellation->cancel();
+        }
         state.worker.join();
     }
     return static_cast<int>(message.wParam);
