@@ -23,7 +23,6 @@ inline constexpr core::u32 kThumbnailCacheVersion = 1U;
 inline constexpr core::u64 kMaximumQuarryCandidates = 1'000'000ULL;
 inline constexpr core::u32 kMaximumQuarryWorkers = 64U;
 inline constexpr core::u32 kMaximumAnimationSamples = 16U;
-inline constexpr core::u64 kMaximumQuarryWorkingSetBytes = 512ULL * 1024ULL * 1024ULL;
 
 struct AnimationSampling final {
     core::u64 first_tick{0U};
@@ -126,17 +125,20 @@ struct QuarryError final {
     const std::filesystem::path& cache_directory,
     bool* cache_hit = nullptr);
 
-// Returns the deterministic first sampled frame cached for this candidate. The
-// cache is disposable: absence/corruption is an explicit miss, never authority.
+// Read-through disposable thumbnail cache for the candidate's first sampled
+// canonical frame. Missing, stale, malformed, or checksum-mismatched entries
+// are regenerated from the manifest and replaced best-effort; cached bytes are
+// never authoritative state.
 [[nodiscard]] core::Result<nodes::Image, QuarryError> read_cached_thumbnail(
     const JobManifest& manifest,
     core::u64 candidate_index,
     const std::filesystem::path& cache_directory);
 
-// Runs or resumes one manifest. At most `worker_count` candidate image working
-// sets exist at once; completed results are committed in candidate-index order
-// to disk and are not retained as an in-memory population. Worker count is also
-// checked against kMaximumQuarryWorkingSetBytes for the selected frame sampling.
+// Runs or resumes one manifest. The scheduler admits only 1..64 workers and
+// processes one bounded batch at a time. Each worker owns at most one candidate
+// evaluation; canonical evaluator limits bound that evaluation's working set.
+// Completed images are discarded after metric extraction and only compact
+// result rows survive, so population size cannot grow resident image memory.
 [[nodiscard]] core::Result<JobProgress, QuarryError> run_job(
     const std::filesystem::path& manifest_path,
     core::u32 worker_count,
