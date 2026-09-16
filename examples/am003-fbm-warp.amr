@@ -1,0 +1,52 @@
+# Layered gradient fBm, independently seeded warp fields, symmetry, gradient palette and ordered dithering.
+amr 1
+evaluator 1
+seed 81985529216486895
+render 256 256 "reference"
+node "base" "core.noise.fbm" 1
+param "base" "basis" enum "gradient"
+param "base" "frequency" f64 4.5
+param "base" "octaves" i64 6
+param "base" "lacunarity" f64 2
+param "base" "gain" f64 0.52
+node "warp-x" "core.noise.value" 1
+param "warp-x" "frequency" f64 2.5
+param "warp-x" "offset_x" f64 11.25
+param "warp-x" "offset_y" f64 -3.75
+node "warp-y" "core.noise.gradient" 1
+param "warp-y" "frequency" f64 3.25
+param "warp-y" "offset_x" f64 -7.5
+param "warp-y" "offset_y" f64 4.125
+node "warped" "core.scalar.warp" 1
+param "warped" "strength" f64 0.22
+param "warped" "wrap" enum "repeat"
+node "sym" "core.scalar.transform.symmetry" 1
+param "sym" "mode" enum "xy"
+node "quant" "core.scalar.quantize" 1
+param "quant" "levels" i64 12
+param "quant" "minimum" f64 0
+param "quant" "maximum" f64 1
+node "palette" "core.palette.gradient2" 1
+param "palette" "r0" f64 0.015
+param "palette" "g0" f64 0.025
+param "palette" "b0" f64 0.11
+param "palette" "a0" f64 1
+param "palette" "r1" f64 0.98
+param "palette" "g1" f64 0.44
+param "palette" "b1" f64 0.045
+param "palette" "a1" f64 1
+node "colour" "core.colour.from_palette" 1
+param "colour" "mode" enum "linear"
+node "image" "core.image.ordered_dither" 1
+param "image" "levels" i64 4
+param "image" "matrix" enum "bayer8"
+edge "base" "value" "warped" "source"
+edge "warp-x" "value" "warped" "x_offset"
+edge "warp-y" "value" "warped" "y_offset"
+edge "warped" "value" "sym" "source"
+edge "sym" "value" "quant" "source"
+edge "quant" "value" "colour" "source"
+edge "palette" "value" "colour" "palette"
+edge "colour" "value" "image" "source"
+output "main" "image" "value"
+meta "example.family" "fbm-warp"
