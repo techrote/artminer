@@ -1,6 +1,6 @@
 # ArtMiner recipe format (`.amr`) — schema 1
 
-This document defines the first accepted ArtMiner recipe file contract introduced by AM-002.
+This document defines the first accepted ArtMiner recipe file contract introduced by AM-002 and the explicit fixed-tick state-boundary semantics activated by AM-007.
 
 A recipe is a **semantic program description**, not a UI document. Its graph, versions, parameters, seed, render settings, and outputs determine meaning. Window layout, editor positions, history/favourites, and descriptive notes do not.
 
@@ -42,7 +42,7 @@ seed <uint64>
 render <width> <height> <quality>
 ```
 
-For AM-002, valid render dimensions are `1..16384` in each axis and the only accepted quality token is `reference`. These settings are already semantic even though rendering is implemented in AM-003.
+Valid render dimensions are `1..16384` in each axis and the only accepted quality token is `reference`. Render settings are semantic even when a particular execution surface imposes a tighter resource limit.
 
 ## Nodes
 
@@ -56,7 +56,7 @@ Example:
 node "source" "core.scalar.constant" 1
 ```
 
-Node IDs and type IDs are stable semantic identifiers. AM-002 identifiers are 1–96 ASCII letters, digits, `.`, `_`, or `-`.
+Node IDs and type IDs are stable semantic identifiers. Schema-1 identifiers are 1–96 ASCII letters, digits, `.`, `_`, or `-`.
 
 The built-in registry is the single source of truth for:
 
@@ -113,9 +113,11 @@ Validation requires:
 - required inputs are connected;
 - non-multiple inputs receive at most one edge;
 - duplicate edges are rejected;
-- the graph is acyclic.
+- the **same-tick dependency graph** is acyclic.
 
-AM-002 defines a `state_boundary` node metadata class for future fixed-tick feedback work, but **does not yet legalize cycles through it**. All cycles remain invalid until a later milestone defines/test-protects the exact state-boundary semantics.
+AM-007 activates the previously reserved `state_boundary` node class. An edge whose **destination node** is a state boundary does not form a same-tick dependency: when that boundary is observed at tick `N > 0`, its `next` input is evaluated at tick `N - 1`; at tick `0` it emits the boundary's explicit initial state. That temporal edge is therefore omitted from same-tick cycle detection.
+
+This is the only legal feedback mechanism. Any cycle that remains after temporal edges entering explicit state-boundary nodes are removed is an ordinary same-tick cycle and is rejected. A stateful node by itself does not legalize a cycle. See `docs/motion-feedback.md` for the fixed-tick execution contract.
 
 ## Outputs
 
@@ -147,7 +149,7 @@ meta "example.note" "non-semantic metadata"
 
 `meta` is **defined to be non-semantic**. ArtMiner preserves and canonically sorts these records, but excludes them from the semantic fingerprint. It is suitable for notes, UI annotations, provenance display hints, or other information that must not change render meaning.
 
-Future semantic extensions require an explicit schema/evaluator/node version change. Do not put render-affecting information in `meta`.
+Future semantic extensions require an explicit schema/evaluator/node version change. Do not put render-affecting information in `meta`. AM-007 PNG sidecars may include `meta "render.tick" "N"` as a provenance annotation because the requested observation tick is deliberately a separate execution coordinate, not part of the recipe semantic fingerprint.
 
 ## Canonical serialization
 
@@ -201,7 +203,7 @@ output "main" "img" "value"
 meta "example.note" "non-semantic metadata"
 ```
 
-It describes a typed graph only. AM-003 is responsible for making these node semantics produce canonical rendered pixels.
+It describes a typed graph and remains a valid stateless recipe. AM-003 provides its canonical static pixels; later fixed-tick evaluators consume the same parser, registry, validator and semantic identity.
 
 ## CLI
 

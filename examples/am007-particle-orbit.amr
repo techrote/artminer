@@ -1,0 +1,25 @@
+# Deterministic orbital motion from a ring initial state.
+amr 1
+evaluator 1
+seed 7002
+render 160 160 "reference"
+node "particles" "core.motion.particles" 1
+param "particles" "count" i64 96
+param "particles" "lifetime" i64 4096
+param "particles" "spawn" enum "ring"
+param "particles" "mode" enum "orbit"
+param "particles" "speed" f64 0.007
+param "particles" "turn_strength" f64 0.58
+param "particles" "field_scale" f64 5.0
+param "particles" "target_x" f64 0.5
+param "particles" "target_y" f64 0.5
+param "particles" "boundary" enum "clamp"
+param "particles" "trail_length" i64 36
+node "deposit" "core.particles.deposit.image" 1
+param "deposit" "radius" f64 0.006
+param "deposit" "intensity" f64 0.28
+param "deposit" "trail_decay" f64 0.90
+param "deposit" "palette" enum "grayscale"
+edge "particles" "value" "deposit" "particles"
+output "main" "deposit" "value"
+meta "example.family" "motion-orbit"

@@ -7,6 +7,10 @@
 namespace artminer::core {
 namespace {
 
+[[nodiscard]] PortSpec input(std::string name, const DataKind kind) {
+    return PortSpec{std::move(name), kind, true, false};
+}
+
 [[nodiscard]] PortSpec output(std::string name, const DataKind kind) {
     return PortSpec{std::move(name), kind, false, false};
 }
@@ -57,10 +61,15 @@ namespace {
 }
 
 [[nodiscard]] ParameterSpec tick_parameter(const i64 maximum) {
-    // The requested tick is semantic state but deliberately not a mutation axis:
-    // specimen mutation explores system parameters while the user explicitly
-    // chooses the inspection tick. Setting it to zero is the canonical reset.
     return integer_parameter("tick", 0, 0, maximum, "simulation", false);
+}
+
+[[nodiscard]] std::vector<ParameterSpec> deposition_parameters() {
+    return {
+        real_parameter("radius", 0.010, 0.0, 0.10, "deposit"),
+        real_parameter("intensity", 0.25, 0.001, 1.0, "deposit"),
+        real_parameter("trail_decay", 0.82, 0.0, 1.0, "trail"),
+    };
 }
 
 }  // namespace
@@ -139,6 +148,86 @@ void append_growth_node_metadata(std::vector<NodeMetadata>& nodes) {
             enum_parameter("boundary", "clamp", {"repeat", "clamp"}, "boundary"),
         },
         NodeStateClass::stateful,
+        cpu_reference,
+    });
+
+    // AM-007 motion uses an execution-surface tick rather than a node-local tick.
+    // The recipe therefore specifies the complete initial system and update rule,
+    // while the requested frame supplies only the integer observation tick.
+    nodes.push_back(NodeMetadata{
+        "core.motion.particles",
+        1U,
+        {},
+        {output("value", DataKind::particle_set)},
+        {
+            integer_parameter("count", 96, 1, 512, "population"),
+            integer_parameter("lifetime", 4096, 1, 16384, "population"),
+            enum_parameter("spawn", "seeded", {"center", "ring", "seeded"}, "initial"),
+            enum_parameter("mode", "flow", {"flow", "attract", "repel", "orbit", "walker"}, "motion"),
+            real_parameter("speed", 0.006, 0.00001, 0.05, "motion", MutationScale::logarithmic),
+            real_parameter("turn_strength", 0.35, 0.0, 1.0, "motion"),
+            real_parameter("field_scale", 5.0, 0.25, 64.0, "flow", MutationScale::logarithmic),
+            real_parameter("target_x", 0.5, -1.0, 2.0, "target"),
+            real_parameter("target_y", 0.5, -1.0, 2.0, "target"),
+            enum_parameter("boundary", "repeat", {"repeat", "clamp"}, "boundary"),
+            integer_parameter("trail_length", 24, 1, 64, "trail"),
+        },
+        NodeStateClass::stateful,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.particles.deposit.scalar",
+        1U,
+        {input("particles", DataKind::particle_set)},
+        {output("value", DataKind::scalar_field)},
+        deposition_parameters(),
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    auto image_deposition = deposition_parameters();
+    image_deposition.push_back(enum_parameter("palette", "heat", {"grayscale", "heat"}, "palette"));
+    nodes.push_back(NodeMetadata{
+        "core.particles.deposit.image",
+        1U,
+        {input("particles", DataKind::particle_set)},
+        {output("value", DataKind::image)},
+        std::move(image_deposition),
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.palette.cycle",
+        1U,
+        {input("palette", DataKind::palette)},
+        {output("value", DataKind::palette)},
+        {
+            integer_parameter("rate", 1, -16, 16, "cycle"),
+            integer_parameter("phase", 0, -256, 256, "cycle"),
+        },
+        NodeStateClass::stateful,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.image.blend",
+        1U,
+        {input("current", DataKind::image), input("history", DataKind::image)},
+        {output("value", DataKind::image)},
+        {real_parameter("history_weight", 0.82, 0.0, 1.0, "feedback")},
+        NodeStateClass::stateless,
+        cpu_reference,
+    });
+
+    nodes.push_back(NodeMetadata{
+        "core.state.delay.image",
+        1U,
+        {input("next", DataKind::image)},
+        {output("previous", DataKind::image)},
+        {enum_parameter("initial", "black", {"black", "white", "transparent"}, "initial")},
+        NodeStateClass::state_boundary,
         cpu_reference,
     });
 }

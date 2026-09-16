@@ -41,6 +41,7 @@ function(artminer_apply_warnings target_name)
 endfunction()
 
 add_library(artminer_core STATIC
+    src/core/animation.cpp
     src/core/graph.cpp
     src/core/growth_nodes.cpp
     src/core/hash.cpp
@@ -54,6 +55,7 @@ artminer_apply_warnings(artminer_core)
 
 add_library(artminer_nodes STATIC
     src/nodes/growth_evaluator.cpp
+    src/nodes/motion_evaluator.cpp
     src/nodes/static_evaluator.cpp
 )
 target_include_directories(artminer_nodes PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -88,6 +90,7 @@ artminer_apply_warnings(artminer_gpu_windows)
 add_executable(ArtMiner
     src/app/browser_window.cpp
     src/app/main.cpp
+    src/app/playback_window.cpp
 )
 target_link_libraries(ArtMiner PRIVATE
     artminer_core
@@ -98,6 +101,7 @@ target_link_libraries(ArtMiner PRIVATE
     user32
     gdi32
     comdlg32
+    comctl32
 )
 target_compile_definitions(ArtMiner PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMiner)
@@ -146,11 +150,22 @@ target_link_libraries(ArtMinerGrowthTests PRIVATE
 target_compile_definitions(ArtMinerGrowthTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerGrowthTests)
 
+add_executable(ArtMinerMotionTests
+    tests/motion_systems_test.cpp
+)
+target_link_libraries(ArtMinerMotionTests PRIVATE
+    artminer_core
+    artminer_nodes
+)
+target_compile_definitions(ArtMinerMotionTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerMotionTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
 add_test(NAME artminer.specimen-browser COMMAND ArtMinerSpecimenTests)
 add_test(NAME artminer.growth COMMAND ArtMinerGrowthTests)
+add_test(NAME artminer.motion COMMAND ArtMinerMotionTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
@@ -169,3 +184,15 @@ add_test(
     NAME artminer.render.growth
     COMMAND ArtMiner render "${CMAKE_CURRENT_SOURCE_DIR}/examples/am006-reaction-diffusion.amr" "${CMAKE_CURRENT_BINARY_DIR}/ctest-am006-growth.png")
 set_tests_properties(artminer.render.growth PROPERTIES PASS_REGULAR_EXPRESSION "rendered .* image-hash")
+add_test(
+    NAME artminer.render.motion-tick
+    COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 12 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-flow.png")
+set_tests_properties(artminer.render.motion-tick PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 12 .* image-hash")
+add_test(
+    NAME artminer.render.feedback-tick
+    COMMAND ArtMiner render-tick "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-feedback-trails.amr" 4 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-feedback.png")
+set_tests_properties(artminer.render.feedback-tick PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 4 .* image-hash")
+add_test(
+    NAME artminer.render.motion-range
+    COMMAND ArtMiner render-range "${CMAKE_CURRENT_SOURCE_DIR}/examples/am007-particle-flow.amr" 0 2 "${CMAKE_CURRENT_BINARY_DIR}/ctest-am007-range")
+set_tests_properties(artminer.render.motion-range PROPERTIES PASS_REGULAR_EXPRESSION "rendered tick 2 .* image-hash")
