@@ -65,6 +65,15 @@ target_include_directories(artminer_nodes PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/sr
 target_link_libraries(artminer_nodes PUBLIC artminer_core)
 artminer_apply_warnings(artminer_nodes)
 
+add_library(artminer_quarry STATIC
+    src/quarry/metrics.cpp
+    src/quarry/quarry.cpp
+    src/quarry/thumbnail_cache.cpp
+)
+target_include_directories(artminer_quarry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(artminer_quarry PUBLIC artminer_core artminer_nodes)
+artminer_apply_warnings(artminer_quarry)
+
 add_library(artminer_platform_windows STATIC
     src/platform/windows/browser_store.cpp
     src/platform/windows/lineage_store.cpp
@@ -100,10 +109,13 @@ add_executable(ArtMiner
     src/app/lineage_window.cpp
     src/app/main.cpp
     src/app/playback_window.cpp
+    src/app/quarry_command.cpp
+    src/app/quarry_window.cpp
 )
 target_link_libraries(ArtMiner PRIVATE
     artminer_core
     artminer_nodes
+    artminer_quarry
     artminer_platform_windows
     artminer_export_windows
     artminer_gpu_windows
@@ -191,6 +203,28 @@ target_link_libraries(ArtMinerExportTests PRIVATE
 target_compile_definitions(ArtMinerExportTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX ARTMINER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 artminer_apply_warnings(ArtMinerExportTests)
 
+add_executable(ArtMinerQuarryTests
+    tests/quarry_test.cpp
+)
+target_link_libraries(ArtMinerQuarryTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_quarry
+)
+target_compile_definitions(ArtMinerQuarryTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerQuarryTests)
+
+add_executable(ArtMinerQuarryThumbnailTests
+    tests/quarry_thumbnail_test.cpp
+)
+target_link_libraries(ArtMinerQuarryThumbnailTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_quarry
+)
+target_compile_definitions(ArtMinerQuarryThumbnailTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerQuarryThumbnailTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
@@ -199,6 +233,8 @@ add_test(NAME artminer.growth COMMAND ArtMinerGrowthTests)
 add_test(NAME artminer.motion COMMAND ArtMinerMotionTests)
 add_test(NAME artminer.breeding-lineage COMMAND ArtMinerBreedingTests)
 add_test(NAME artminer.export COMMAND ArtMinerExportTests)
+add_test(NAME artminer.quarry COMMAND ArtMinerQuarryTests)
+add_test(NAME artminer.quarry-thumbnail COMMAND ArtMinerQuarryThumbnailTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)
