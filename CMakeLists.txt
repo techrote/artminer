@@ -42,10 +42,13 @@ endfunction()
 
 add_library(artminer_core STATIC
     src/core/animation.cpp
+    src/core/breeding.cpp
     src/core/graph.cpp
     src/core/growth_nodes.cpp
     src/core/hash.cpp
+    src/core/lineage_record.cpp
     src/core/node_registry.cpp
+    src/core/parameter_locks_lineage.cpp
     src/core/prng.cpp
     src/core/recipe.cpp
     src/core/specimen_browser.cpp
@@ -64,6 +67,7 @@ artminer_apply_warnings(artminer_nodes)
 
 add_library(artminer_platform_windows STATIC
     src/platform/windows/browser_store.cpp
+    src/platform/windows/lineage_store.cpp
     src/platform/windows/portable_workspace.cpp
 )
 target_include_directories(artminer_platform_windows PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -89,6 +93,7 @@ artminer_apply_warnings(artminer_gpu_windows)
 
 add_executable(ArtMiner
     src/app/browser_window.cpp
+    src/app/lineage_window.cpp
     src/app/main.cpp
     src/app/playback_window.cpp
 )
@@ -160,12 +165,24 @@ target_link_libraries(ArtMinerMotionTests PRIVATE
 target_compile_definitions(ArtMinerMotionTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 artminer_apply_warnings(ArtMinerMotionTests)
 
+add_executable(ArtMinerBreedingTests
+    tests/breeding_lineage_test.cpp
+)
+target_link_libraries(ArtMinerBreedingTests PRIVATE
+    artminer_core
+    artminer_nodes
+    artminer_platform_windows
+)
+target_compile_definitions(ArtMinerBreedingTests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+artminer_apply_warnings(ArtMinerBreedingTests)
+
 enable_testing()
 add_test(NAME artminer.unit COMMAND ArtMinerTests)
 add_test(NAME artminer.gpu-preview COMMAND ArtMinerGpuTests)
 add_test(NAME artminer.specimen-browser COMMAND ArtMinerSpecimenTests)
 add_test(NAME artminer.growth COMMAND ArtMinerGrowthTests)
 add_test(NAME artminer.motion COMMAND ArtMinerMotionTests)
+add_test(NAME artminer.breeding-lineage COMMAND ArtMinerBreedingTests)
 add_test(NAME artminer.version COMMAND ArtMiner --version)
 set_tests_properties(artminer.version PROPERTIES PASS_REGULAR_EXPRESSION "ArtMiner 0.1.0-dev")
 add_test(NAME artminer.help COMMAND ArtMiner --help)

@@ -50,6 +50,7 @@ public:
 
     [[nodiscard]] std::size_t parameter_count() const noexcept { return parameters_.size(); }
     [[nodiscard]] std::size_t group_count() const noexcept { return groups_.size(); }
+    [[nodiscard]] std::string serialize_canonical() const;
 
 private:
     using LockKey = std::pair<std::string, std::string>;

@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "app/browser_window.hpp"
+#include "app/lineage_window.hpp"
 #include "app/playback_window.hpp"
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
@@ -42,7 +43,8 @@ void print_help() {
         << "       ArtMiner render <file.amr> <output.png>\n"
         << "       ArtMiner render-tick <file.amr> <tick> <output.png>\n"
         << "       ArtMiner render-range <file.amr> <start> <end> <output-dir>\n"
-        << "       ArtMiner animate <file.amr>\n\n"
+        << "       ArtMiner animate <file.amr>\n"
+        << "       ArtMiner lineage [parent-a.amr] [parent-b.amr]\n\n"
         << "Options:\n"
         << "  --help, -h             Show this help text.\n"
         << "  --version              Show product/version information.\n"
@@ -53,7 +55,8 @@ void print_help() {
         << "use the AM-007 canonical fixed-tick motion/feedback path. PNG renders are\n"
         << "accompanied by deterministic provenance sidecars. animate opens the native\n"
         << "pause/play, single-step, reset and preview-speed inspector; speed changes\n"
-        << "wall-clock playback only and never changes the requested simulation tick.\n\n"
+        << "wall-clock playback only and never changes the requested simulation tick.\n"
+        << "lineage opens the AM-008 ordered two-parent breeder and portable ancestry browser.\n\n"
         << "Without a command ArtMiner opens the native 4x4 specimen browser.\n"
         << "Mutation and seed-only variation are deterministic from explicit seeds.\n"
         << "Main shortcuts: M mutate, N seed variants, F favourite, arrow keys select,\n"
@@ -326,6 +329,31 @@ void print_recipe_parse_error(const artminer::core::RecipeError& error) {
     return artminer::app::run_playback_application(*recipe);
 }
 
+[[nodiscard]] int run_lineage_command(const int argc, wchar_t* argv[]) {
+    if (argc < 2 || argc > 4) {
+        std::cerr << "usage: ArtMiner lineage [parent-a.amr] [parent-b.amr]\n";
+        return 2;
+    }
+    auto workspace_result = PortableWorkspace::from_executable();
+    if (workspace_result.is_error()) {
+        print_workspace_error(workspace_result.error());
+        return 4;
+    }
+    PortableWorkspace workspace = std::move(workspace_result).value();
+    auto layout_result = workspace.ensure_layout();
+    if (layout_result.is_error()) {
+        print_workspace_error(layout_result.error());
+        return 4;
+    }
+    const std::optional<std::filesystem::path> parent_a = argc >= 3
+        ? std::optional<std::filesystem::path>{std::filesystem::path(argv[2])}
+        : std::nullopt;
+    const std::optional<std::filesystem::path> parent_b = argc >= 4
+        ? std::optional<std::filesystem::path>{std::filesystem::path(argv[3])}
+        : std::nullopt;
+    return artminer::app::run_lineage_application(workspace.layout(), parent_a, parent_b);
+}
+
 }  // namespace
 
 int wmain(const int argc, wchar_t* argv[]) {
@@ -345,6 +373,9 @@ int wmain(const int argc, wchar_t* argv[]) {
     }
     if (argc >= 2 && std::wstring_view(argv[1]) == L"animate") {
         return run_animate_command(argc, argv);
+    }
+    if (argc >= 2 && std::wstring_view(argv[1]) == L"lineage") {
+        return run_lineage_command(argc, argv);
     }
 
     CommandLine command_line;
