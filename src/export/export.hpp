@@ -38,11 +38,19 @@ struct ExportRequest final {
     RasterFormat raster_format{RasterFormat::png};
     std::filesystem::path destination_directory;
     std::string stem{"art"};
+    // Named image output. AM-009 callers retain the conventional "main" default;
+    // AM-013 material recipes can export explicit height/normal/mask outputs.
+    std::string output_name{"main"};
     std::optional<core::u64> tick;
     core::u64 start_tick{0U};
     core::u64 end_tick{0U};
     core::u32 sheet_columns{8U};
     std::string palette_node_id;
+    // When present, sequence/sheet export records loop continuity evidence.
+    // require_validated_loop turns failed/unproved continuity into an export error
+    // rather than merely recording that the sequence is not a validated loop.
+    std::optional<core::u64> loop_length;
+    bool require_validated_loop{false};
 };
 
 struct ExportedFile final {
@@ -90,7 +98,8 @@ struct ExportError final {
 // High-level transactional export entry point shared by native UI and headless
 // commands. The source recipe is accepted by const reference and never mutated.
 // destination_directory is created only by an atomic same-parent staging rename;
-// existing destinations are never overwritten.
+// existing destinations are never overwritten. AM-013 material/loop outputs use
+// this same transaction, manifest, provenance and deterministic ordering path.
 [[nodiscard]] core::Result<ExportResult, ExportError> export_recipe(
     const core::Recipe& recipe,
     const ExportRequest& request);
