@@ -93,6 +93,7 @@ artminer_apply_warnings(artminer_gpu_windows)
 
 add_executable(ArtMiner
     src/app/browser_window.cpp
+    src/app/lineage_window.cpp
     src/app/main.cpp
     src/app/playback_window.cpp
 )
