@@ -1,0 +1,17 @@
+# Multi-state generations-style cellular automaton. Try --tick 28.
+amr 1
+evaluator 1
+seed 15111065706836454659
+render 128 128 "reference"
+node "growth" "core.growth.cellular_automaton" 1
+param "growth" "states" i64 6
+param "growth" "birth_min" i64 3
+param "growth" "birth_max" i64 3
+param "growth" "survive_min" i64 2
+param "growth" "survive_max" i64 3
+param "growth" "initial_density" f64 0.31
+param "growth" "boundary" enum "wrap"
+param "growth" "palette" enum "ember"
+output "main" "growth" "image"
+meta "example.family" "cellular-automaton"
+meta "example.recommended_tick" "28"
