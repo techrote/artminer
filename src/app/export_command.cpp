@@ -6,15 +6,18 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "app/export_window.hpp"
 #include "core/graph.hpp"
 #include "core/recipe.hpp"
 #include "core/types.hpp"
 #include "export/export.hpp"
+#include "platform/windows/portable_workspace.hpp"
 
 namespace artminer::app {
 namespace {
@@ -85,6 +88,7 @@ namespace {
 void print_usage() {
     std::cerr
         << "usage:\n"
+        << "  ArtMiner export ui <file.amr>\n"
         << "  ArtMiner export still <file.amr> <output-dir> <png|bmp|rgba>\n"
         << "  ArtMiner export frame <file.amr> <tick> <output-dir> <png|bmp|rgba>\n"
         << "  ArtMiner export sequence <file.amr> <start> <end> <output-dir> <png|bmp|rgba>\n"
@@ -113,6 +117,29 @@ int run_export_command(const int argc, wchar_t* argv[]) {
         return 2;
     }
     const std::wstring_view action(argv[2]);
+
+    if (action == L"ui") {
+        if (argc != 4) {
+            print_usage();
+            return 2;
+        }
+        auto recipe = load_recipe(std::filesystem::path(argv[3]));
+        if (!recipe) {
+            return 6;
+        }
+        auto workspace_result = platform::windows::PortableWorkspace::from_executable();
+        if (workspace_result.is_error()) {
+            std::wcerr << L"export workspace error: " << workspace_result.error().message << L'\n';
+            return 4;
+        }
+        auto workspace = std::move(workspace_result).value();
+        auto layout = workspace.ensure_layout();
+        if (layout.is_error()) {
+            std::wcerr << L"export workspace error: " << layout.error().message << L'\n';
+            return 4;
+        }
+        return run_export_application(*recipe, workspace.layout().output);
+    }
 
     if (action == L"still") {
         if (argc != 6) {
